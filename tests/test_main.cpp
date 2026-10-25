@@ -15,6 +15,7 @@
 #include "seis/planes.hpp"
 
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -249,13 +250,21 @@ void test_catalog_and_seismicity_planes() {
                                       cfg.region.lon_min, cfg.region.lon_max,
                                       cfg.region.grid_step_deg);
   const auto post_seis = seis::analyze_seismicity(post_ev, grid);
-  CHECK(post_seis.dominant_plane.length_km > 20.0);
-  CHECK(post_seis.dominant_plane.planarity > 0.2);
-  CHECK(post_seis.dominant_plane.dip_deg > 20.0);
+  const auto &pl = post_seis.dominant_plane;
+  CHECK(pl.length_km > 20.0);
+  CHECK(pl.planarity > 0.2);
+  // The Van fault dips ~50 deg NNW (strike ~248). A dip the catalog depths
+  // cannot resolve is NaN; a resolved one must be plausible and dip that way.
+  if (std::isfinite(pl.dip_deg)) {
+    CHECK(pl.dip_deg > 20.0 && pl.dip_deg < 89.0);
+    CHECK(std::abs(std::remainder(pl.strike_deg - 248.0, 360.0)) < 30.0);
+  }
   std::cout << "  [van2011 aftershocks] n=" << post_ev.size()
             << " strike=" << post_seis.dominant_plane.strike_deg
             << " dip=" << post_seis.dominant_plane.dip_deg
-            << " len=" << post_seis.dominant_plane.length_km << " km\n";
+            << " len=" << post_seis.dominant_plane.length_km
+            << " km free_depth=" << post_seis.dominant_plane.n_free_depth
+            << "\n";
 }
 
 void test_ftle_and_waveforms_lyapunov() {
@@ -539,6 +548,77 @@ void test_synthetic_inversion() {
             << "% max_resolution=" << res_max << "\n";
 }
 
+// Deterministic uniform [0, 1) generator for synthetic catalogs
+struct Lcg {
+  std::uint64_t state;
+  double next() {
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    return static_cast<double>(state >> 11) * 0x1.0p-53;
+  }
+};
+
+void test_seismicity_dip_with_fixed_depths() {
+  using namespace chaosmap;
+  const auto grid = geo::Grid2D::make(38.0, 39.4, 42.5, 44.3, 0.05);
+  const double ss = std::sin(geo::deg2rad(248.0));
+  const double cs = std::cos(geo::deg2rad(248.0));
+  const double sd = std::sin(geo::deg2rad(50.0));
+  const double cd = std::cos(geo::deg2rad(50.0));
+  Lcg rng{42};
+  // Approximately N(0, sigma) from four uniforms
+  auto noise = [&rng](double sigma) {
+    double a = 0.0;
+    for (int k = 0; k < 4; ++k)
+      a += rng.next();
+    return sigma * (a - 2.0) * std::sqrt(3.0);
+  };
+  // Event at `along` km along strike and `across` km to the right of it
+  auto event = [&](double along, double across, double depth_km) {
+    const auto ll =
+        grid.proj.to_latlon(along * ss + across * cs, along * cs - across * ss);
+    return io::CatalogEvent{.lat_deg = ll.x,
+                            .lon_deg = ll.y,
+                            .depth_km = depth_km,
+                            .magnitude = 3.0};
+  };
+
+  // 600 located aftershocks on a 248/50 plane (dipping NNW) from 3 km down
+  std::vector<io::CatalogEvent> cat;
+  for (int i = 0; i < 600; ++i) {
+    const double along = -30.0 + 60.0 * rng.next();
+    const double down_dip = 18.0 * rng.next();
+    cat.push_back(event(along + noise(1.0), down_dip * cd + noise(1.0),
+                        3.0 + down_dip * sd + noise(1.0)));
+  }
+  // 600 events across the aftershock footprint held at locator trial depths;
+  // unmasked, this layer flattens the fitted plane until no dip is resolved
+  std::vector<io::CatalogEvent> held;
+  const double trial_depths[] = {5.0, 7.0, 6.98, 7.01};
+  for (int i = 0; i < 600; ++i) {
+    held.push_back(event(-30.0 + 60.0 * rng.next(), -12.0 + 36.0 * rng.next(),
+                         trial_depths[i % 4]));
+  }
+  auto mixed = cat;
+  mixed.insert(mixed.end(), held.begin(), held.end());
+
+  const auto fit = seis::fit_hypocentre_plane(mixed, grid.proj);
+  // All held events are removed; real events sharing their 0.1 km depth bins
+  // go too, which costs only a few percent
+  CHECK(fit.n_free_depth <= 600 && fit.n_free_depth >= 570);
+  CHECK_NEAR(fit.dip_deg, 50.0, 8.0);
+  CHECK(std::abs(std::remainder(fit.strike_deg - 248.0, 360.0)) < 10.0);
+
+  // Depths that are all held at trial values cannot resolve a dip
+  const auto none = seis::fit_hypocentre_plane(held, grid.proj);
+  CHECK(none.n_free_depth == 0);
+  CHECK(std::isnan(none.dip_deg));
+  CHECK(std::isnan(none.width_km));
+  CHECK(std::isnan(seis::fit_hypocentre_plane({}, grid.proj).dip_deg));
+  std::cout << "  [synthetic aftershocks] dip=" << fit.dip_deg
+            << " strike=" << fit.strike_deg << " free=" << fit.n_free_depth
+            << "/" << mixed.size() << "\n";
+}
+
 } // namespace
 
 int main() {
@@ -554,6 +634,7 @@ int main() {
   test_lee_coda_duration();
   test_fused_displacement_frame();
   test_synthetic_inversion();
+  test_seismicity_dip_with_fixed_depths();
   if (g_failures == 0) {
     std::cout << "[PASS] All chaosmap tests passed";
     if (g_skipped > 0)

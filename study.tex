@@ -31,7 +31,7 @@ Istanbul, Turkey\\
 \begin{abstract}
 Constraining fault geometry, pre-seismic strain accumulation, dynamic coseismic slip, and post-seismic state evolution requires synthesizing geodetic deformation fields, seismicity distributions, and seismic waveform dynamics. Traditional methodologies evaluate these data streams in isolation: geodetic inversions estimate static dislocation geometry and slip amplitude; hypocentre clustering maps aftershock clouds; and waveform analyses characterize source rupture properties. Here, we present \texttt{chaosmap}, an end-to-end high-performance C++23 pipeline that couples continuous GNSS geodesy, 3D hypocentre principal component regression, and two complementary Lyapunov formulations: (1) Geodetic Finite-Time Lyapunov Exponents ($L_{\text{geo}}$), which detect Lagrangian coherent strain structures and deformation barriers via particle advection in the continuous velocity gradient tensor; and (2) Broadband Seismic Waveform Lyapunov Analysis ($L_{\text{seis}}$), which quantifies temporal predictability loss and phase-space divergence via Wolf and Rosenstein largest Lyapunov exponent algorithms on ambient crustal noise after Lee (1972) coda duration exclusion and ocean microseism control-band differencing.
 
-We validate the analytical elastic dislocation kernel against the Okada (1985) check values, which it reproduces to within their four-significant-figure rounding (absolute error $<5\times 10^{-6}\text{ m}$ for unit slip), and test the complete pipeline on two major tectonic events in Turkey: the 2011 Van-Erci\c{s} ($M_w\,7.1$) blind reverse earthquake and the 2023 Kahramanmara\c{s} ($M_w\,7.8$) East Anatolian strike-slip rupture. In the 2011 Van event, multi-station GNSS trajectory inversion yields a fault striking $248.0^\circ$, dipping $50.5^\circ$, with a geodetic moment of $5.30\times 10^{19}\text{ N}\cdot\text{m}$ ($M_w\,7.08$) and peak slip of $2.48\text{ m}$, achieving a variance reduction of $97.39\%$. $L_{\text{seis}}$ exhibits a pre-event 3-day array-anomaly ROC AUC of $0.733$, which is not significant ($p = 0.125$, the smallest $p$-value a circular time-slide null can return with eight pre-event days), and post-minus-pre Wolf exponent drops that decrease in magnitude with epicentral distance at the three stations that returned data ($\Delta \lambda_1 = -0.59\text{ bits/s}$ at TVAN, $23.7\text{ km}$; $-0.48$ at GEVA, $60.0\text{ km}$; $-0.42$ at DYDN, $92.8\text{ km}$). In the 2023 Kahramanmara\c{s} rupture, station EKZ1 records a horizontal coseismic displacement of $4.67\text{ m}$, and distributed slip inversion yields a peak slip of $22.05\text{ m}$ (top-quartile mean $11.99\text{ m}$), geodetic $M_w\,7.78$, and variance reduction of $77.47\%$. Because daily GNSS solutions combine the $M_w\,7.8$ mainshock with the $M_w\,7.5$ Elbistan event of the same day, this single-plane model is only an approximation, and its peak-slip patch, adjacent to EKZ1 and the $M_w\,7.5$ rupture, is an artefact of the parameterisation. Four-panel kinematic synthesis maps (Before, Moved, After, and Change) provide a unified framework for resolving crustal stress accumulation and rupture boundaries.
+We validate the analytical elastic dislocation kernel against the Okada (1985) check values, which it reproduces to within their four-significant-figure rounding (absolute error $<5\times 10^{-6}\text{ m}$ for unit slip), and test the complete pipeline on two major tectonic events in Turkey: the 2011 Van-Erci\c{s} ($M_w\,7.1$) blind reverse earthquake and the 2023 Kahramanmara\c{s} ($M_w\,7.8$) East Anatolian strike-slip rupture. In the 2011 Van event, multi-station GNSS trajectory inversion yields a fault striking $248.0^\circ$, dipping $50.5^\circ$, with a geodetic moment of $5.30\times 10^{19}\text{ N}\cdot\text{m}$ ($M_w\,7.08$) and peak slip of $2.48\text{ m}$, achieving a variance reduction of $97.39\%$. $L_{\text{seis}}$ exhibits a pre-event 3-day array-anomaly ROC AUC of $0.867$, which is not significant ($p = 0.125$, the smallest $p$-value a circular time-slide null can return with eight pre-event days), and post-minus-pre Wolf exponent drops that decrease in magnitude with epicentral distance at the three stations that returned data ($\Delta \lambda_1 = -0.57\text{ bits/s}$ at TVAN, $23.7\text{ km}$; $-0.33$ at GEVA, $60.0\text{ km}$; $-0.07$ at DYDN, $92.8\text{ km}$). In the 2023 Kahramanmara\c{s} rupture, station EKZ1 records a horizontal coseismic displacement of $4.67\text{ m}$, and distributed slip inversion yields a peak slip of $22.05\text{ m}$ (top-quartile mean $11.99\text{ m}$), geodetic $M_w\,7.78$, and variance reduction of $77.47\%$. Because daily GNSS solutions combine the $M_w\,7.8$ mainshock with the $M_w\,7.5$ Elbistan event of the same day, this single-plane model is only an approximation, and its peak-slip patch, adjacent to EKZ1 and the $M_w\,7.5$ rupture, is an artefact of the parameterisation. Four-panel kinematic synthesis maps (Before, Moved, After, and Change) provide a unified framework for resolving crustal stress accumulation and rupture boundaries.
 \end{abstract}
 
 \section{Introduction}
@@ -108,7 +108,7 @@ We implement a robust two-stage regression:
     \phi = \text{atan2}(v_{1,x}, v_{1,y}) \pmod{360^\circ}
     \end{equation}
     The ratio of eigenvalues $1 - \lambda_2/\lambda_1$ quantifies horizontal planarity.
-    \item \textbf{Vertical Cross-Sectional Orthogonal Regression:} Each hypocentre is projected onto the cross-section perpendicular to strike ($u_i = x_i \cos\phi - y_i \sin\phi$) and vertical depth ($v_i = z_i$). Within the fault core corridor $|u_i| \le 1.25\sigma_u$, the 2D orthogonal regression matrix $\mathbf{C}_{uv}$ yields the down-dip angle $\delta = \text{atan2}(|v_{2,z}|, |v_{2,u}|)$. The strike is flipped by $180^\circ$ where needed so that the plane dips to the right of strike. Dip, length ($3.2\sqrt{\lambda_1}$), and width are reported as fitted, without bounds: a dip near $0^\circ$ means that the cross-section does not resolve a dipping plane (for example, where catalog depths are poorly constrained).
+    \item \textbf{Vertical Cross-Sectional Orthogonal Regression:} Each hypocentre is projected onto the cross-section perpendicular to strike ($u_i = x_i \cos\phi - y_i \sin\phi$) and vertical depth ($v_i = z_i$). Catalog locators hold poorly constrained events at, or barely move them from, a fixed trial depth; in the Van aftershock catalog, 231 of 2042 events ($M \ge 3$, 45 days) sit at exactly 7.0 km, 156 at 5.0 km and another 241 at 6.97--7.01 km. Such depths carry no information on dip and stack into a flat layer, so events in spikes of the depth histogram (a 0.1 km bin holding $\ge 2\%$ of the events and $\ge 4\times$ the median count of the bins 0.3--1.0 km away) are excluded from this stage. Within the fault core corridor $|u_i| \le 1.25\sigma_u$, the 2D orthogonal regression matrix $\mathbf{C}_{uv}$ of the remaining events, about their centroid, yields the down-dip angle $\delta = \text{atan2}(|v_{2,z}|, |v_{2,u}|)$, and the strike is flipped by $180^\circ$ where needed so that the plane dips to the right of strike. The dip is reported as unresolved when fewer than 20 events remain, when the cross-section cloud is not elongated (minor/major variance $> 0.25$), or when the fit is shallower than $10^\circ$, since a near-horizontal major axis is what a depth-limited seismogenic layer produces whatever the fault dip. Length ($3.2\sqrt{\lambda_1}$) and width are reported as fitted, without bounds.
 \end{enumerate}
 
 \subsection{Geodetic Lagrangian Coherent Structures (\texorpdfstring{$L_{\text{geo}}$}{L\_geo})}
@@ -167,23 +167,11 @@ The final state fields are synthesized on the case grid ($0.05^\circ$ for Van, $
 \end{align}
 
 \section{Results}
-% NOTE FOR THE AUTHOR (not typeset): the case-study numbers below come from the
-% committed out/ products, which were generated before the following code fixes
-% and must be regenerated (chaosmap all + tools/plot_maps.py) and re-checked:
-%  - L-geo FTLE: east/north border cells were normalised twice (saturated), and
-%    the flow-map gradient carried a projection artefact. This affects the
-%    L-geo ridge, its benchmark scores and weights, and the Before/Change maps.
-%  - L-geo^co was never computed (all zeros) and now feeds Moved/After.
-%  - Moved map: the forward Okada field was offset by the epicentre-to-grid-
-%    centre distance (about 10 km for Van, 28 km for Kahramanmaras).
-%  - L-seis: Lee (1972) coda durations were too short (sign error), and the
-%    mainshock exclusion and day bins used 00:00 UTC instead of the origin time
-%    (the Van mainshock at 10:41 UTC was not excluded). This affects Table
-%    tab:van_lyapunov, the AUC/p values and the L-seis benchmark.
-%  - MIDAS used 350-day pairs (now one year): small changes to velocities and
-%    hence to coseismic offsets and the inversion.
-%  - Aftershock-plane dip/length were clamped to [20, 89] deg / <= 250 km.
-%  - Strain rates were 1000x too small (only absolute values; maps unchanged).
+% NOTE FOR THE AUTHOR (not typeset): the case-study numbers below match the
+% out/ products regenerated in commit d4fcb67. The fixed-depth masking of the
+% aftershock dip was added after that run; it changes only the aftershock dip
+% (summary_metrics.json, fault_features.geojson, Panel D callout), which the
+% text does not quote. Re-run chaosmap all + tools/plot_maps.py to refresh them.
 
 \subsection{Analytical Dislocation Kernel Benchmark (Okada 1985)}
 We first verified our C++23 dislocation kernel against the reference benchmark values published in Okada (1985, Table 2) \cite{okada1985} for a fault dipping at $\delta = 70^\circ$ with Poisson's ratio $\nu = 0.25$. As presented in Table~\ref{tab:okada_bench}, all strike-slip, dip-slip, and tensile displacement components agree to within $5\times 10^{-6}$ (for unit slip), which is within the rounding of the four-significant-figure reference values, confirming numerical fidelity before inversion. The vertical-fault branch ($\delta = 90^\circ$) agrees with $\delta = 89.999^\circ$ to $10^{-6}$.
@@ -221,11 +209,11 @@ The 23 October 2011 Van earthquake occurred on a blind thrust fault dipping nort
 \textbf{(A) BEFORE EARTHQUAKE}: Background fault susceptibility raster combining geodetic $L_{\text{geo}}$ FTLE, pre-seismic broadband $L_{\text{seis}}$ Lyapunov anomaly, GNSS interseismic velocity arrows (white vectors, $\text{mm/yr}$), pre-event seismicity lineament (cyan dashed line), and $L_{\text{geo}}$ FTLE ridge (gold dashed line).
 \textbf{(B) HOW MUCH IT MOVED}: Inverted Okada coseismic surface displacement field, distributed slip amplitude across rectangular patches (colored $0\text{--}2.5\text{ m}$), surface projection of the upper edge of the inverted (blind) fault (solid red line), and GNSS coseismic displacement vectors (cyan arrows with station offset labels in $\text{mm}$).
 \textbf{(C) AFTER EARTHQUAKE}: Post-seismic activated zone with 3D aftershock cloud ($n = 6579$), fitted aftershock rupture plane (yellow line), and broadband seismic stations labeled with post-minus-pre Wolf Lyapunov drop $\Delta \lambda_1$.
-\textbf{(D) BEFORE vs AFTER CHANGE}: Normalized differential fault state field ($\Delta \mathcal{F} = \mathcal{F}_{\text{After}} - \mathcal{F}_{\text{Before}}$, diverging blue-white-red), overlaying pre-event axis vs. coseismic trace vs. aftershock plane, with the callout box detailing the angle between the pre-event seismicity lineament and the coseismic strike ($81.3^\circ$), the offset between the high-value centroids of the Before and Moved maps ($75.9\text{ km}$), peak slip ($2.48\text{ m}$), and Lyapunov benchmark scores ($L_{\text{seis}}$ skill $0.74$, weight $68.8\%$).}
+\textbf{(D) BEFORE vs AFTER CHANGE}: Normalized differential fault state field ($\Delta \mathcal{F} = \mathcal{F}_{\text{After}} - \mathcal{F}_{\text{Before}}$, diverging blue-white-red), overlaying pre-event axis vs. coseismic trace vs. aftershock plane, with the callout box detailing the angle between the pre-event seismicity lineament and the coseismic strike ($81.3^\circ$), the offset between the high-value centroids of the Before and Moved maps ($54.8\text{ km}$), peak slip ($2.48\text{ m}$), and Lyapunov benchmark scores ($L_{\text{seis}}$ skill $0.75$, weight $61.3\%$).}
 \label{fig:van4panel}
 \end{figure}
 
-The inverted fault parameters and kinematics are summarized in Table~\ref{tab:fault_params}. The fault plane strikes $248.0^\circ$ (ENE-WSW) and dips $50.5^\circ$ NNW (right-hand rule), with a reverse-slip rake of $68.1^\circ$. The estimated geodetic seismic moment is $5.30 \times 10^{19}\text{ N}\cdot\text{m}$ ($M_w\,7.08$, matching the seismological catalog $M_w\,7.10$), yielding an exceptional variance reduction of $97.39\%$. Peak distributed slip reaches $2.48\text{ m}$ on the deepest patch row (centroid depth $19.3\text{ km}$), with a top-quartile slip mean of $2.43\text{ m}$; slip varies little between patches. At station MRDY ($37.2\text{ km}$ northeast of the epicenter), the coseismic horizontal offset reaches $60.02\text{ mm}$ ($\Delta e = -17.43\text{ mm}$, $\Delta n = -57.43\text{ mm}$, $\Delta u = -12.16\text{ mm}$).
+The inverted fault parameters and kinematics are summarized in Table~\ref{tab:fault_params}. The fault plane strikes $248.0^\circ$ (ENE-WSW) and dips $50.5^\circ$ NNW (right-hand rule), with a reverse-slip rake of $68.1^\circ$. The estimated geodetic seismic moment is $5.30 \times 10^{19}\text{ N}\cdot\text{m}$ ($M_w\,7.08$, matching the seismological catalog $M_w\,7.10$), yielding an exceptional variance reduction of $97.39\%$. Peak distributed slip reaches $2.48\text{ m}$ on the deepest patch row (centroid depth $19.3\text{ km}$), with a top-quartile slip mean of $2.43\text{ m}$; slip varies little between patches. At station MRDY ($37.2\text{ km}$ northeast of the epicenter), the coseismic horizontal offset reaches $60.02\text{ mm}$ ($\Delta e = -17.43\text{ mm}$, $\Delta n = -57.44\text{ mm}$, $\Delta u = -12.16\text{ mm}$).
 
 \begin{table}[htbp]
 \centering
@@ -248,14 +236,14 @@ Top-Quartile Mean Slip & $2.43\text{ m}$ & $11.99\text{ m}$ \\
 Geodetic Seismic Moment $M_0$ & $5.30 \times 10^{19}\text{ N}\cdot\text{m}$ & $5.93 \times 10^{20}\text{ N}\cdot\text{m}$ \\
 Geodetic Magnitude $M_w$ & $7.08$ & $7.78$ \\
 Variance Reduction (VR) & $97.39\%$ & $77.47\%$ \\
-Max GNSS Offset & $60.02\text{ mm}$ (MRDY) & $4671.60\text{ mm}$ (EKZ1) \\
+Max GNSS Offset & $60.02\text{ mm}$ (MRDY) & $4671.51\text{ mm}$ (EKZ1) \\
 Lineament vs.\ coseismic strike $\Delta \phi$ & $81.3^\circ$ & $25.8^\circ$ \\
-Before/Moved centroid offset & $75.9\text{ km}$ & $136.1\text{ km}$ \\
+Before/Moved centroid offset & $54.8\text{ km}$ & $234.6\text{ km}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The multi-station broadband waveform analysis reveals striking pre- and post-seismic dynamics (Table~\ref{tab:van_lyapunov}). In the 3 days preceding the mainshock, the multi-station array dispersion achieves a ROC AUC of $0.733$. This is not statistically significant: with eight pre-event days the circular time-slide null can return no $p$-value below $1/8$, and the observed $p = 0.125$ equals that floor.
+The multi-station broadband waveform analysis reveals striking pre- and post-seismic dynamics (Table~\ref{tab:van_lyapunov}). In the 3 days preceding the mainshock, the multi-station array dispersion achieves a ROC AUC of $0.867$. This is not statistically significant: with eight pre-event days the circular time-slide null can return no $p$-value below $1/8$, and the observed $p = 0.125$ equals that floor.
 
 \begin{table}[htbp]
 \centering
@@ -265,20 +253,20 @@ The multi-station broadband waveform analysis reveals striking pre- and post-sei
 \toprule
 Station & Epicentral Dist. & Pre- $\lambda_{\text{Wolf}}$ & Post- $\lambda_{\text{Wolf}}$ & $\Delta \lambda_{\text{Wolf}}$ & Pre- $\lambda_{\text{Ros}}$ & Post- $\lambda_{\text{Ros}}$ & $\Delta \lambda_{\text{Ros}}$ \\
 \midrule
-TVAN & $23.73\text{ km}$ & $0.671$ & $0.083$ & \textbf{$-0.588$} & $1.442$ & $0.903$ & \textbf{$-0.538$} \\
-GEVA & $59.96\text{ km}$ & $0.712$ & $0.233$ & \textbf{$-0.479$} & $1.489$ & $1.048$ & \textbf{$-0.441$} \\
-DYDN & $92.79\text{ km}$ & $0.792$ & $0.374$ & \textbf{$-0.418$} & $1.343$ & $1.104$ & \textbf{$-0.239$} \\
+TVAN & $23.73\text{ km}$ & $0.695$ & $0.128$ & \textbf{$-0.567$} & $1.441$ & $0.951$ & \textbf{$-0.490$} \\
+GEVA & $59.96\text{ km}$ & $0.683$ & $0.353$ & \textbf{$-0.331$} & $1.464$ & $0.968$ & \textbf{$-0.496$} \\
+DYDN & $92.79\text{ km}$ & $0.787$ & $0.716$ & \textbf{$-0.071$} & $1.353$ & $1.233$ & \textbf{$-0.121$} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-At the three stations, the magnitude of the post-minus-pre change in both the Wolf exponent ($\Delta \lambda_{\text{Wolf}}$) and Rosenstein divergence slope ($\Delta \lambda_{\text{Ros}}$) decreases with epicentral distance:
+At the three stations, the magnitude of the post-minus-pre change in the Wolf exponent ($\Delta \lambda_{\text{Wolf}}$) decreases with epicentral distance:
 \begin{equation}
 |\Delta \lambda_{\text{Wolf}}(\text{TVAN})| > |\Delta \lambda_{\text{Wolf}}(\text{GEVA})| > |\Delta \lambda_{\text{Wolf}}(\text{DYDN})|
 \end{equation}
-Station TVAN ($23.7\text{ km}$ away) collapses from $0.671\text{ bits/s}$ pre-seismically to $0.083\text{ bits/s}$ post-seismically ($\Delta \lambda_1 = -0.588$). Station GEVA ($60.0\text{ km}$) drops by $-0.479$, and station DYDN ($92.8\text{ km}$) drops by $-0.418$. With three stations and seven post-event days, this ordering is suggestive rather than conclusive. The post-event windows also sample the aftershock wavefield, which the $M \ge 4.3$ coda mask removes only partially and which is strongest at the nearest station. The drop is therefore consistent with, but does not by itself establish, a change in the properties of the near-field crust.
+Station TVAN ($23.7\text{ km}$ away) drops from $0.695\text{ bits/s}$ pre-seismically to $0.128\text{ bits/s}$ post-seismically ($\Delta \lambda_1 = -0.567$). Station GEVA ($60.0\text{ km}$) drops by $-0.331$, and station DYDN ($92.8\text{ km}$) by only $-0.071$. The Rosenstein divergence slope ($\Delta \lambda_{\text{Ros}}$) does not follow the same ordering: it drops by similar amounts at TVAN and GEVA ($-0.490$ and $-0.496$) and much less at DYDN ($-0.121$). With three stations and seven post-event days, this ordering is suggestive rather than conclusive. The post-event windows also sample the aftershock wavefield, which the $M \ge 4.3$ coda mask removes only partially and which is strongest at the nearest station. The drop is therefore consistent with, but does not by itself establish, a change in the properties of the near-field crust.
 
-In the quantitative benchmark, $L_{\text{seis}}$ achieves a spatial ROC AUC of $0.898$ against the rupture corridor, an alignment misfit of only $30.8^\circ$, and an overall composite skill of $0.739$ (assigned weight $68.8\%$), out-performing the regional $L_{\text{geo}}$ field (assigned weight $31.2\%$). These scores are measured against the coseismic rupture and are therefore retrospective.
+In the quantitative benchmark, $L_{\text{seis}}$ achieves a spatial ROC AUC of $0.872$ against the rupture corridor, a ridge $36.2\text{ km}$ from the rupture with an alignment misfit of $14.9^\circ$, and an overall composite skill of $0.746$ (assigned weight $61.3\%$). The regional $L_{\text{geo}}$ field scores a spatial AUC of $0.553$, a ridge $48.4\text{ km}$ from the rupture with a $42.3^\circ$ misfit, and a skill of $0.471$ (assigned weight $38.7\%$). These scores are measured against the coseismic rupture and are therefore retrospective.
 
 \subsection{Case Study 2: The 2023 Kahramanmara\c{s} Earthquake (\textit{M}\textsubscript{w} 7.8)}
 The 6 February 2023 Kahramanmara\c{s} rupture represents an extreme strike-slip benchmark. We inverted 39 regional GNSS stations (18 with coseismic offsets) and 9649 regional earthquakes.
@@ -290,13 +278,13 @@ The 6 February 2023 Kahramanmara\c{s} rupture represents an extreme strike-slip 
 \textbf{(A) BEFORE EARTHQUAKE}: Pre-seismic strain rate and interseismic GNSS velocity field along the East Anatolian Fault Zone, showing strong shear localization across the Mara\c{s}-Pazarc\i k boundary.
 \textbf{(B) HOW MUCH IT MOVED}: Inverted distributed slip reaching $22.05\text{ m}$ peak slip ($11.99\text{ m}$ top-quartile mean), with huge coseismic GNSS offsets exceeding $4.6\text{ m}$ at station EKZ1 and $0.74\text{ m}$ at ADY1.
 \textbf{(C) AFTER EARTHQUAKE}: Aftershock corridor ($n = 7762$) extending from Hatay northward into Malatya; the 120-day catalog includes the aftershocks of both the $M_w\,7.8$ and $M_w\,7.5$ events.
-\textbf{(D) BEFORE vs AFTER CHANGE}: Differential change map, with a $25.8^\circ$ angle between the pre-event seismicity lineament and the coseismic strike, and a $136.1\text{ km}$ offset between the high-value centroids of the Before and Moved maps.}
+\textbf{(D) BEFORE vs AFTER CHANGE}: Differential change map, with a $25.8^\circ$ angle between the pre-event seismicity lineament and the coseismic strike, and a $234.6\text{ km}$ offset between the high-value centroids of the Before and Moved maps.}
 \label{fig:kahramanmaras4panel}
 \end{figure}
 
 The single-plane geometry search recovers a strike of $213.5^\circ$ (parallel to the Pazarc\i k segment of the EAFZ), a near-vertical dip of $85.0^\circ$, and a predominantly left-lateral mean rake of $11.7^\circ$ (Table~\ref{tab:fault_params}). The geodetic moment is $5.93 \times 10^{20}\text{ N}\cdot\text{m}$ ($M_w\,7.78$), with a variance reduction of $77.47\%$. The agreement with the mainshock catalog $M_w\,7.80$ should not be over-read: the GNSS offsets also contain the $M_w\,7.5$ Elbistan event (10:24 UTC on the same day), which daily solutions cannot separate from the mainshock, so the combined moment of the sequence exceeds that of the mainshock alone.
 
-Observed GNSS coseismic offsets (Table~\ref{tab:kahraman_gnss}) document extraordinary crustal deformation: station EKZ1 ($60.1\text{ km}$ north of the reference location, close to the $M_w\,7.5$ rupture) moved \textbf{$4.67\text{ m}$} horizontally ($\Delta e = -4646.1\text{ mm}$, $\Delta n = +487.5\text{ mm}$, $\Delta u = -127.0\text{ mm}$). Station KAHR displaced by $620.9\text{ mm}$, ANTP by $419.9\text{ mm}$, and TUF1 by $360.8\text{ mm}$. The distributed inversion places its peak slip of $22.05\text{ m}$ (with $18.7\text{ m}$ of dip slip) on the shallowest patch at the northeastern end of the model plane ($38.06^\circ$N, $37.24^\circ$E), $5\text{ km}$ from EKZ1, with a top-quartile average slip of $11.99\text{ m}$. A single plane aligned with the East Anatolian Fault has to absorb EKZ1's offset, which is dominated by the $M_w\,7.5$ rupture, so this peak is an artefact of the single-fault parameterisation rather than a physical slip estimate. A two-fault model is required to resolve slip on either rupture.
+Observed GNSS coseismic offsets (Table~\ref{tab:kahraman_gnss}) document extraordinary crustal deformation: station EKZ1 ($60.1\text{ km}$ north of the reference location, close to the $M_w\,7.5$ rupture) moved \textbf{$4.67\text{ m}$} horizontally ($\Delta e = -4646.0\text{ mm}$, $\Delta n = +487.5\text{ mm}$, $\Delta u = -127.1\text{ mm}$). Station KAHR displaced by $620.9\text{ mm}$, ANTP by $419.9\text{ mm}$, and TUF1 by $360.8\text{ mm}$. The distributed inversion places its peak slip of $22.05\text{ m}$ (with $18.7\text{ m}$ of dip slip) on the shallowest patch at the northeastern end of the model plane ($38.06^\circ$N, $37.24^\circ$E), $5\text{ km}$ from EKZ1, with a top-quartile average slip of $11.99\text{ m}$. A single plane aligned with the East Anatolian Fault has to absorb EKZ1's offset, which is dominated by the $M_w\,7.5$ rupture, so this peak is an artefact of the single-fault parameterisation rather than a physical slip estimate. A two-fault model is required to resolve slip on either rupture.
 
 \begin{table}[htbp]
 \centering
@@ -307,18 +295,18 @@ Observed GNSS coseismic offsets (Table~\ref{tab:kahraman_gnss}) document extraor
 \toprule
 Station & Distance & $\Delta e$ (mm) & $\Delta n$ (mm) & $\Delta u$ (mm) & Total Horiz. (mm) & Postseismic 60d (mm) \\
 \midrule
-EKZ1 & $60.1\text{ km}$ & $-4646.10$ & $+487.49$ & $-127.02$ & \textbf{4671.60} & $21.02$ \\
-ADY1 & $104.0\text{ km}$ & $+740.99$ & $-69.15$ & $-71.30$ & \textbf{744.21} & $51.88$ \\
-KAHR & $24.2\text{ km}$ & $-597.35$ & $-169.40$ & $+38.27$ & \textbf{620.90} & $4.37$ \\
+EKZ1 & $60.1\text{ km}$ & $-4646.01$ & $+487.49$ & $-127.06$ & \textbf{4671.51} & $21.02$ \\
+ADY1 & $104.0\text{ km}$ & $+740.92$ & $-69.04$ & $-71.37$ & \textbf{744.13} & $51.88$ \\
+KAHR & $24.2\text{ km}$ & $-597.37$ & $-169.38$ & $+38.03$ & \textbf{620.92} & $4.37$ \\
 ANTP & $55.3\text{ km}$ & $+300.90$ & $+292.81$ & $+16.38$ & \textbf{419.86} & $46.00$ \\
-TUF1 & $114.8\text{ km}$ & $-325.13$ & $+156.33$ & $-22.63$ & \textbf{360.76} & $50.43$ \\
-ONIY & $89.6\text{ km}$ & $-178.61$ & $-239.17$ & $+31.39$ & \textbf{298.50} & $14.39$ \\
-GURU & $134.2\text{ km}$ & $-152.21$ & $-94.79$ & $+18.16$ & \textbf{179.31} & $36.51$ \\
-HAT2 & $170.9\text{ km}$ & $-140.05$ & $-86.68$ & $+61.06$ & \textbf{164.70} & $27.92$ \\
-APK1 & $207.3\text{ km}$ & $-76.60$ & $-141.81$ & $+31.77$ & \textbf{161.17} & $41.63$ \\
-ELAZ & $224.9\text{ km}$ & $-50.85$ & $-67.28$ & $+7.42$ & \textbf{84.33} & $23.81$ \\
-AKLE & $185.4\text{ km}$ & $+75.34$ & $-17.77$ & $-27.21$ & \textbf{77.40} & $20.43$ \\
-VIR4 & $234.6\text{ km}$ & $+71.27$ & $-22.78$ & $-25.30$ & \textbf{74.82} & $19.99$ \\
+TUF1 & $114.8\text{ km}$ & $-325.16$ & $+156.33$ & $-22.62$ & \textbf{360.79} & $50.43$ \\
+ONIY & $89.6\text{ km}$ & $-178.60$ & $-239.17$ & $+31.40$ & \textbf{298.50} & $14.40$ \\
+GURU & $134.2\text{ km}$ & $-152.20$ & $-94.78$ & $+18.14$ & \textbf{179.30} & $36.52$ \\
+HAT2 & $170.9\text{ km}$ & $-140.04$ & $-86.70$ & $+61.03$ & \textbf{164.70} & $27.92$ \\
+APK1 & $207.3\text{ km}$ & $-76.57$ & $-141.71$ & $+31.75$ & \textbf{161.07} & $41.63$ \\
+ELAZ & $224.9\text{ km}$ & $-50.85$ & $-67.28$ & $+7.40$ & \textbf{84.33} & $23.81$ \\
+AKLE & $185.4\text{ km}$ & $+75.24$ & $-17.77$ & $-27.09$ & \textbf{77.31} & $20.44$ \\
+VIR4 & $234.6\text{ km}$ & $+71.04$ & $-22.76$ & $-25.26$ & \textbf{74.59} & $19.99$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -329,7 +317,7 @@ No usable TDVMS broadband waveforms covering the 2023 analysis window were avail
 Our benchmark comparisons in the Van 2011 event demonstrate why multi-physics coupling is essential:
 \begin{itemize}
     \item \textbf{$L_{\text{geo}}$ (Lagrangian FTLE):} Operates on the inter-seismic crustal strain tensor over spatial scales of tens to hundreds of kilometers. It excels at demarcating major tectonic suture lines and crustal block boundaries where regional velocity gradients shear virtual tracer trajectories. However, because GNSS stations have typical spatial spacings of $30\text{--}50\text{ km}$, $L_{\text{geo}}$ cannot resolve localized blind faults until significant strain accumulation is sustained.
-    \item \textbf{$L_{\text{seis}}$ (Broadband Waveform Lyapunov Analysis):} Operates locally on ambient seismic noise propagating through the upper crustal waveguide ($0.05\text{--}0.50\text{ Hz}$). The working hypothesis is that, as stress builds in the impending nucleation zone, micro-crack opening, pore-fluid migration, and localized non-linear elasticity may alter wave scattering and phase-space predictability. In Van 2011, $L_{\text{seis}}$ localized the blind rupture corridor to within $19.3\text{ km}$ (spatial AUC $0.898$, retrospective) and produced a pre-seismic array anomaly ($AUC = 0.733$) that is not statistically significant ($p = 0.125$). The post-seismic Lyapunov drop decreased with distance at three stations, which is consistent with near-field changes but is not conclusive.
+    \item \textbf{$L_{\text{seis}}$ (Broadband Waveform Lyapunov Analysis):} Operates locally on ambient seismic noise propagating through the upper crustal waveguide ($0.05\text{--}0.50\text{ Hz}$). The working hypothesis is that, as stress builds in the impending nucleation zone, micro-crack opening, pore-fluid migration, and localized non-linear elasticity may alter wave scattering and phase-space predictability. In Van 2011, the $L_{\text{seis}}$ ridge lies $36.2\text{ km}$ from the blind rupture (spatial AUC $0.872$, retrospective), and the pre-seismic array anomaly ($AUC = 0.867$) is not statistically significant ($p = 0.125$). The post-seismic Lyapunov drop decreased with distance at three stations, which is consistent with near-field changes but is not conclusive.
 \end{itemize}
 
 By evaluating candidate skill $\mathcal{S}$ against the inverted rupture geometry, \texttt{chaosmap} replaces a fixed $L_{\text{geo}}$/$L_{\text{seis}}$ weighting with a skill-based one. The score itself uses fixed heuristic coefficients and post-event information, so the resulting weights describe retrospective agreement, not forecasting skill.
@@ -348,7 +336,7 @@ Computation is therefore negligible compared with data latency: the coseismic es
 In this study, we introduced and validated \texttt{chaosmap}, a unified C++23 computational framework that combines continuous GNSS geodesy, 3D hypocentre distributions, and non-linear Lyapunov analysis to map fault state kinematics before, during, and after major earthquakes:
 \begin{enumerate}
     \item We confirmed the analytical fidelity of the elastic dislocation implementation against the benchmark tables of Okada (1985), to within the rounding of the published values (error $<5\times 10^{-6}$ for unit slip).
-    \item In the 2011 Van-Erci\c{s} ($M_w\,7.1$) earthquake, we resolved a blind thrust fault ($248.0^\circ$ strike, $50.5^\circ$ dip, $2.48\text{ m}$ peak slip, geodetic $M_w\,7.08$) with $97.39\%$ variance reduction. Broadband Lyapunov analysis ($L_{\text{seis}}$) achieved a pre-event horizon AUC of $0.733$ (not significant, $p = 0.125$) and a post-seismic Lyapunov drop that decreased with distance at three stations ($\Delta \lambda_1 = -0.59$ at $23.7\text{ km}$ vs. $-0.42$ at $92.8\text{ km}$).
+    \item In the 2011 Van-Erci\c{s} ($M_w\,7.1$) earthquake, we resolved a blind thrust fault ($248.0^\circ$ strike, $50.5^\circ$ dip, $2.48\text{ m}$ peak slip, geodetic $M_w\,7.08$) with $97.39\%$ variance reduction. Broadband Lyapunov analysis ($L_{\text{seis}}$) achieved a pre-event horizon AUC of $0.867$ (not significant, $p = 0.125$) and a post-seismic Wolf-exponent drop that decreased with distance at three stations ($\Delta \lambda_1 = -0.57$ at $23.7\text{ km}$ vs. $-0.07$ at $92.8\text{ km}$).
     \item In the 2023 Kahramanmara\c{s} ($M_w\,7.8$) sequence, we captured massive near-field GNSS displacement ($4.67\text{ m}$ at EKZ1) and inverted a single-plane distributed slip model (geodetic $M_w\,7.78$). Its $22.05\text{ m}$ peak absorbs the $M_w\,7.5$ Elbistan rupture, so resolving the sequence requires a multi-fault model.
     \item The automated four-panel synthesis maps (Before, Moved, After, Change) provide an intuitive, reproducible product for visualising and quantifying fault movement.
 \end{enumerate}

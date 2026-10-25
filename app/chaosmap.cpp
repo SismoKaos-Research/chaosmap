@@ -11,6 +11,7 @@
 #include "out/export.hpp"
 #include "seis/planes.hpp"
 
+#include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -19,6 +20,15 @@
 #include <vector>
 
 namespace {
+
+// Prints a fitted seismicity dip, which is NaN when the catalog depths cannot
+// resolve it.
+struct DipText {
+  double deg;
+};
+std::ostream &operator<<(std::ostream &os, DipText d) {
+  return std::isfinite(d.deg) ? (os << d.deg << " deg") : (os << "unresolved");
+}
 
 void print_usage() {
   std::cout << "Usage:\n"
@@ -136,11 +146,11 @@ int main(int argc, char **argv) {
   std::cout << "[3/6] 3D Seismicity Planes:\n"
             << "      Before Event (5 yr): n=" << pre_events.size()
             << ", strike=" << pre_seis.dominant_plane.strike_deg
-            << " deg, dip=" << pre_seis.dominant_plane.dip_deg << " deg\n"
+            << " deg, dip=" << DipText{pre_seis.dominant_plane.dip_deg} << "\n"
             << "      After Event (120 d): n=" << post_events.size()
             << ", strike=" << post_seis.dominant_plane.strike_deg
-            << " deg, dip=" << post_seis.dominant_plane.dip_deg
-            << " deg, L=" << post_seis.dominant_plane.length_km << " km\n";
+            << " deg, dip=" << DipText{post_seis.dominant_plane.dip_deg}
+            << ", L=" << post_seis.dominant_plane.length_km << " km\n";
   if (subcmd == "seismicity")
     return EXIT_SUCCESS;
 

@@ -33,6 +33,15 @@ namespace detail {
   return std::isfinite(v) ? v : 0.0;
 }
 
+// Streams a number, or JSON `null` when it is not finite (e.g. a dip the
+// catalog depths cannot resolve), instead of a misleading 0.
+struct JsonNum {
+  double v;
+};
+inline std::ostream &operator<<(std::ostream &os, JsonNum n) {
+  return std::isfinite(n.v) ? (os << n.v) : (os << "null");
+}
+
 } // namespace detail
 
 inline void export_case_results(
@@ -119,7 +128,9 @@ inline void export_case_results(
     f << "    \"post_aftershock_length_km\": "
       << detail::safe_num(post_seis.dominant_plane.length_km) << ",\n";
     f << "    \"post_aftershock_dip_deg\": "
-      << detail::safe_num(post_seis.dominant_plane.dip_deg) << "\n";
+      << detail::JsonNum{post_seis.dominant_plane.dip_deg} << ",\n";
+    f << "    \"post_aftershock_free_depth_count\": "
+      << post_seis.dominant_plane.n_free_depth << "\n";
     f << "  },\n";
 
     f << "  \"lyapunov_benchmark\": {\n";
@@ -273,7 +284,7 @@ inline void export_case_results(
       f << "    {\"type\": \"Feature\", \"properties\": {\"role\": \"" << role
         << "\", \"label\": \"" << label
         << "\", \"strike_deg\": " << detail::safe_num(strike)
-        << ", \"dip_deg\": " << detail::safe_num(dip)
+        << ", \"dip_deg\": " << detail::JsonNum{dip}
         << "}, \"geometry\": {\"type\": \"LineString\", \"coordinates\": [["
         << lon0 << ", " << lat0 << "], [" << lon1 << ", " << lat1 << "]]}}";
     };
