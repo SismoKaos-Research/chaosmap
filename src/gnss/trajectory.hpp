@@ -106,7 +106,8 @@ midas_component_velocity(std::span<const io::Tenv3Sample> samples,
   const double sig_hat =
       trimmed.empty() ? mad : linalg::mad_sigma(trimmed, v_hat);
   // Effective independent 1-yr pairs scale roughly with sqrt(N / 4) for daily
-  // autocorrelated flicker noise, floored at 0.3 mm/yr horizontal, 0.8 mm/yr up.
+  // autocorrelated flicker noise, floored at 0.3 mm/yr horizontal, 0.8 mm/yr
+  // up.
   const double n_eff =
       std::max(1.0, static_cast<double>(trimmed.size()) / 90.0);
   const double floor_sig = (comp < 2) ? 0.0004 : 0.0010;
@@ -160,12 +161,12 @@ analyze_station(const io::GnssStationSeries &series,
   const double vel_cutoff =
       (out.n_pre_days >= 420) ? event_mjd : (event_mjd + 5000.0);
 
-  auto [ve, sve] =
-      detail::midas_component_velocity(series.samples, midas_steps, vel_cutoff, 0);
-  auto [vn, svn] =
-      detail::midas_component_velocity(series.samples, midas_steps, vel_cutoff, 1);
-  auto [vu, svu] =
-      detail::midas_component_velocity(series.samples, midas_steps, vel_cutoff, 2);
+  auto [ve, sve] = detail::midas_component_velocity(series.samples, midas_steps,
+                                                    vel_cutoff, 0);
+  auto [vn, svn] = detail::midas_component_velocity(series.samples, midas_steps,
+                                                    vel_cutoff, 1);
+  auto [vu, svu] = detail::midas_component_velocity(series.samples, midas_steps,
+                                                    vel_cutoff, 2);
   if (std::isfinite(ve) && std::isfinite(vn) && std::isfinite(vu)) {
     out.has_velocity = true;
     out.vel_enu_m_yr = {ve, vn, vu};
@@ -221,13 +222,14 @@ analyze_station(const io::GnssStationSeries &series,
   double post_sigs[3]{};
 
   for (int comp = 0; comp < 3; ++comp) {
-    const double v_sec =
-        out.has_velocity
-            ? (comp == 0 ? out.vel_enu_m_yr.x
-                         : (comp == 1 ? out.vel_enu_m_yr.y : out.vel_enu_m_yr.z))
-            : 0.0;
+    const double v_sec = out.has_velocity
+                             ? (comp == 0 ? out.vel_enu_m_yr.x
+                                          : (comp == 1 ? out.vel_enu_m_yr.y
+                                                       : out.vel_enu_m_yr.z))
+                             : 0.0;
 
-    // A) Robust detrended pre/post median difference over [-21d, -1d] vs [+1d, +15d]
+    // A) Robust detrended pre/post median difference over [-21d, -1d] vs [+1d,
+    // +15d]
     std::vector<double> pre_v, post_v;
     for (const auto *s : pre_near) {
       if (s->mjd >= event_mjd - 21.0) {

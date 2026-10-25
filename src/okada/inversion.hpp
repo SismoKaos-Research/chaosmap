@@ -50,11 +50,9 @@ namespace detail {
 // Solves 2-parameter (U1, U2) weighted least squares for a single candidate
 // `FaultPatch` against station coseismic offsets, regularized weakly toward
 // the reference rake and seismic moment when the network is one-sided.
-[[nodiscard]] inline std::pair<linalg::Vec2, double>
-fit_single_patch_slip(FaultPatch p,
-                      std::span<const gnss::StationMotion> stations,
-                      const geo::LocalProjection &proj, double rake_hint_deg,
-                      double s_prior_m) {
+[[nodiscard]] inline std::pair<linalg::Vec2, double> fit_single_patch_slip(
+    FaultPatch p, std::span<const gnss::StationMotion> stations,
+    const geo::LocalProjection &proj, double rake_hint_deg, double s_prior_m) {
   const std::size_t n_sta = stations.size();
   const std::size_t m_rows = 3 * n_sta + 2;
   linalg::Mat G(m_rows, 2, 0.0);
@@ -164,10 +162,9 @@ invert_fault(std::span<const gnss::StationMotion> all_stations,
             cand.dip_deg = std::clamp(dip_hint_deg + dd, 15.0, 89.0);
             cand.length_km = l0_km * l_scale;
             cand.width_km = w0_km;
-            cand.depth_km =
-                std::max(0.55 * cand.width_km *
-                             std::sin(geo::deg2rad(cand.dip_deg)),
-                         depth_hint_km);
+            cand.depth_km = std::max(0.55 * cand.width_km *
+                                         std::sin(geo::deg2rad(cand.dip_deg)),
+                                     depth_hint_km);
             auto [sl, cost] = detail::fit_single_patch_slip(
                 cand, stations, proj, rake_hint_deg, s_prior_m);
             // Penalize centroid offset weakly so poorly constrained directions
@@ -266,9 +263,8 @@ invert_fault(std::span<const gnss::StationMotion> all_stations,
           best.east_km + u_off * sin_s + v_off * std::cos(dip_rad) * cos_s;
       sub.north_km =
           best.north_km + u_off * cos_s - v_off * std::cos(dip_rad) * sin_s;
-      sub.depth_km =
-          std::max(0.5 * dw * std::sin(dip_rad) + 0.2,
-                   best.depth_km + v_off * std::sin(dip_rad));
+      sub.depth_km = std::max(0.5 * dw * std::sin(dip_rad) + 0.2,
+                              best.depth_km + v_off * std::sin(dip_rad));
       grid_patches[ir * n_strike + ic] = sub;
     }
   }
@@ -352,8 +348,7 @@ invert_fault(std::span<const gnss::StationMotion> all_stations,
           A_aug(row, 2 * (ir * n_strike + (ic + 1)) + comp) = -lambda;
           ++deg;
         }
-        A_aug(row, 2 * j + comp) =
-            lambda * (static_cast<double>(deg) + 0.15);
+        A_aug(row, 2 * j + comp) = lambda * (static_cast<double>(deg) + 0.15);
       }
     }
   }
@@ -365,12 +360,12 @@ invert_fault(std::span<const gnss::StationMotion> all_stations,
     for (std::size_t ic = 0; ic < n_strike; ++ic) {
       const std::size_t j = ir * n_strike + ic;
       // Cosine taper along strike and depth
-      const double tx = std::sin(std::numbers::pi *
-                                 (static_cast<double>(ic) + 0.5) /
-                                 static_cast<double>(n_strike));
-      const double ty = std::sin(std::numbers::pi *
-                                 (static_cast<double>(ir) + 0.5) /
-                                 static_cast<double>(n_dip));
+      const double tx =
+          std::sin(std::numbers::pi * (static_cast<double>(ic) + 0.5) /
+                   static_cast<double>(n_strike));
+      const double ty =
+          std::sin(std::numbers::pi * (static_cast<double>(ir) + 0.5) /
+                   static_cast<double>(n_dip));
       const double taper = 1.25 * tx * ty;
       const std::size_t row0 = n_obs + n_params + 2 * j + 0;
       const std::size_t row1 = n_obs + n_params + 2 * j + 1;
@@ -427,9 +422,9 @@ invert_fault(std::span<const gnss::StationMotion> all_stations,
   out.max_slip_m = max_slip;
   out.mean_rake_deg = geo::rad2deg(std::atan2(sum_u2, sum_u1));
   out.moment_nm = shear_modulus_pa * patch_area_m2 * sum_slip;
-  out.mw_geodetic =
-      (out.moment_nm > 0.0) ? (2.0 / 3.0) * (std::log10(out.moment_nm) - 9.1)
-                            : 0.0;
+  out.mw_geodetic = (out.moment_nm > 0.0)
+                        ? (2.0 / 3.0) * (std::log10(out.moment_nm) - 9.1)
+                        : 0.0;
 
   // Predicted displacements at each station & variance reduction
   out.predicted_enu_m.resize(n_sta);
@@ -448,7 +443,8 @@ invert_fault(std::span<const gnss::StationMotion> all_stations,
               0.25 * st.coseismic_enu_m.z * st.coseismic_enu_m.z;
   }
   out.wrms_mm =
-      1000.0 * std::sqrt(rss_m2 / static_cast<double>(std::max<std::size_t>(1, 3 * n_sta)));
+      1000.0 * std::sqrt(rss_m2 / static_cast<double>(
+                                      std::max<std::size_t>(1, 3 * n_sta)));
   out.variance_reduction_pct =
       (tss_m2 > 0.0) ? 100.0 * (1.0 - rss_m2 / tss_m2) : 0.0;
   return out;

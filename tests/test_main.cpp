@@ -30,8 +30,8 @@ void check(bool cond, const char *expr, const char *file, int line) {
 void check_near(double a, double b, double tol, const char *expr,
                 const char *file, int line) {
   if (!(std::isfinite(a) && std::isfinite(b) && std::abs(a - b) <= tol)) {
-    std::cerr << "[FAIL] " << file << ":" << line << " (" << expr
-              << ") got " << a << " vs " << b << " (tol " << tol << ")\n";
+    std::cerr << "[FAIL] " << file << ":" << line << " (" << expr << ") got "
+              << a << " vs " << b << " (tol " << tol << ")\n";
     ++g_failures;
   }
 }
@@ -109,9 +109,8 @@ void test_gnss_van_and_kahramanmaras() {
       io::read_tenv3(km_cfg.paths.gnss_dir / "IGS20" / "EKZ1.tenv3");
   const auto ekz1_steps =
       steps.contains("EKZ1") ? steps.at("EKZ1") : std::vector<io::StepEntry>{};
-  const auto ekz1_mot =
-      gnss::analyze_station(ekz1, ekz1_steps, km_cfg.event.mjd,
-                            km_cfg.event.lat, km_cfg.event.lon);
+  const auto ekz1_mot = gnss::analyze_station(
+      ekz1, ekz1_steps, km_cfg.event.mjd, km_cfg.event.lat, km_cfg.event.lon);
   CHECK(ekz1_mot.has_coseismic);
   // EKZ1 moved ~ -4.65 m West, +0.49 m North during 2023-02-06 sequence
   CHECK_NEAR(ekz1_mot.coseismic_enu_m.x, -4.65, 0.05);
@@ -120,8 +119,8 @@ void test_gnss_van_and_kahramanmaras() {
 
 void test_okada85_table2() {
   using namespace chaosmap::okada;
-  // Okada (1985) Table 2 (Case 2: x=2, y=3, d=4, L=3, W=2, lambda=mu => nu=0.25)
-  // 1) delta = 70 deg, Strike-slip (U1=1)
+  // Okada (1985) Table 2 (Case 2: x=2, y=3, d=4, L=3, W=2, lambda=mu =>
+  // nu=0.25) 1) delta = 70 deg, Strike-slip (U1=1)
   auto s70 = okada85_local(2.0, 3.0, 4.0, 70.0, 3.0, 2.0, 1.0, 0.0, 0.0, 0.25);
   CHECK_NEAR(s70.x, -8.689e-3, 1e-5);
   CHECK_NEAR(s70.y, -4.298e-3, 1e-5);
@@ -139,15 +138,18 @@ void test_okada85_table2() {
   CHECK_NEAR(t70.y, +1.056e-2, 1e-5);
   CHECK_NEAR(t70.z, +3.214e-3, 1e-5);
 
-  // 4) delta = 90 deg (vertical fault singularity branch) continuity check vs 89.999 deg
-  auto s89 = okada85_local(2.0, 3.0, 4.0, 89.999, 3.0, 2.0, 1.0, 0.0, 0.0, 0.25);
-  auto s90 = okada85_local(2.0, 3.0, 4.0, 90.0,   3.0, 2.0, 1.0, 0.0, 0.0, 0.25);
+  // 4) delta = 90 deg (vertical fault singularity branch) continuity check
+  // vs 89.999 deg
+  auto s89 =
+      okada85_local(2.0, 3.0, 4.0, 89.999, 3.0, 2.0, 1.0, 0.0, 0.0, 0.25);
+  auto s90 = okada85_local(2.0, 3.0, 4.0, 90.0, 3.0, 2.0, 1.0, 0.0, 0.0, 0.25);
   CHECK_NEAR(s90.x, s89.x, 1e-6);
   CHECK_NEAR(s90.y, s89.y, 1e-6);
   CHECK_NEAR(s90.z, s89.z, 1e-6);
 
-  auto d89 = okada85_local(2.0, 3.0, 4.0, 89.999, 3.0, 2.0, 0.0, 1.0, 0.0, 0.25);
-  auto d90 = okada85_local(2.0, 3.0, 4.0, 90.0,   3.0, 2.0, 0.0, 1.0, 0.0, 0.25);
+  auto d89 =
+      okada85_local(2.0, 3.0, 4.0, 89.999, 3.0, 2.0, 0.0, 1.0, 0.0, 0.25);
+  auto d90 = okada85_local(2.0, 3.0, 4.0, 90.0, 3.0, 2.0, 0.0, 1.0, 0.0, 0.25);
   CHECK_NEAR(d90.x, d89.x, 1e-6);
   CHECK_NEAR(d90.y, d89.y, 1e-6);
   CHECK_NEAR(d90.z, d89.z, 1e-6);
@@ -160,30 +162,30 @@ void test_fault_inversion() {
     const auto cfg = core::CaseConfig::load(cfg_file);
     const auto steps =
         io::read_steps_file(cfg.paths.gnss_dir / "meta" / "steps.txt");
-    const auto raw_sta = io::load_regional_gnss(
-        cfg.paths.gnss_dir, cfg.event.lat, cfg.event.lon,
-        cfg.region.max_gnss_dist_km);
+    const auto raw_sta =
+        io::load_regional_gnss(cfg.paths.gnss_dir, cfg.event.lat, cfg.event.lon,
+                               cfg.region.max_gnss_dist_km);
     std::vector<gnss::StationMotion> motions;
     for (const auto &s : raw_sta) {
       const auto st_steps = steps.contains(s.station)
                                 ? steps.at(s.station)
                                 : std::vector<io::StepEntry>{};
-      motions.push_back(gnss::analyze_station(
-          s, st_steps, cfg.event.mjd, cfg.event.lat, cfg.event.lon));
+      motions.push_back(gnss::analyze_station(s, st_steps, cfg.event.mjd,
+                                              cfg.event.lat, cfg.event.lon));
     }
     const geo::LocalProjection proj(cfg.event.lat, cfg.event.lon);
-    const auto inv = okada::invert_fault(
-        motions, proj, cfg.event.mw_ref, cfg.event.depth_km,
-        cfg.event.strike_hint_deg, cfg.event.dip_hint_deg,
-        cfg.event.rake_hint_deg, cfg.event.is_strike_slip);
+    const auto inv =
+        okada::invert_fault(motions, proj, cfg.event.mw_ref, cfg.event.depth_km,
+                            cfg.event.strike_hint_deg, cfg.event.dip_hint_deg,
+                            cfg.event.rake_hint_deg, cfg.event.is_strike_slip);
     CHECK(!inv.patches.empty());
     CHECK(inv.max_slip_m > 0.3);
     CHECK(inv.mw_geodetic >= cfg.event.mw_ref - 0.6 &&
           inv.mw_geodetic <= cfg.event.mw_ref + 0.6);
     CHECK(inv.variance_reduction_pct > 50.0);
     std::cout << "  [" << cfg.event.id << "] strike=" << inv.plane.strike_deg
-              << " dip=" << inv.plane.dip_deg
-              << " max_slip=" << inv.max_slip_m << " m"
+              << " dip=" << inv.plane.dip_deg << " max_slip=" << inv.max_slip_m
+              << " m"
               << " Mw=" << inv.mw_geodetic
               << " VR=" << inv.variance_reduction_pct << "%\n";
 
@@ -263,8 +265,8 @@ void test_ftle_and_waveforms_lyapunov() {
         static_cast<std::size_t>(600.0 * tr.sample_rate_hz);
     CHECK(tr.data.size() >= win_samples);
     const auto filt = dsp::preprocess_window(
-        std::span<const double>(tr.data.data(), win_samples),
-        tr.sample_rate_hz, 5.0, 0.05, 0.5);
+        std::span<const double>(tr.data.data(), win_samples), tr.sample_rate_hz,
+        5.0, 0.05, 0.5);
     CHECK(filt.size() == 3000);
     const auto wf =
         chaos::extract_window_features(filt, 5.0, tr.start_mjd, 5, 5, 5);

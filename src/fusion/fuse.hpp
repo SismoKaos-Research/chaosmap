@@ -75,15 +75,12 @@ normalize_01(std::span<const double> v) {
 
 } // namespace detail
 
-[[nodiscard]] inline FusedFaultMap
-fuse_fault_states(const geo::Grid2D &grid,
-                  std::span<const gnss::StationMotion> gnss_stations,
-                  const gnss::GeodeticGridFields &geod,
-                  const okada::InversionResult &inv,
-                  const seis::SeismicityAnalysis &pre_seis,
-                  const seis::SeismicityAnalysis &post_seis,
-                  const anomaly::ArrayAnomalyResult &seis_anom,
-                  const LyapunovBenchmark &bm) {
+[[nodiscard]] inline FusedFaultMap fuse_fault_states(
+    const geo::Grid2D &grid, std::span<const gnss::StationMotion> gnss_stations,
+    const gnss::GeodeticGridFields &geod, const okada::InversionResult &inv,
+    const seis::SeismicityAnalysis &pre_seis,
+    const seis::SeismicityAnalysis &post_seis,
+    const anomaly::ArrayAnomalyResult &seis_anom, const LyapunovBenchmark &bm) {
   FusedFaultMap out;
   const std::size_t N = grid.size();
   out.before_susceptibility.assign(N, 0.0);
@@ -96,8 +93,7 @@ fuse_fault_states(const geo::Grid2D &grid,
   for (const auto &s : gnss_stations) {
     if (!s.has_coseismic)
       continue;
-    const double h =
-        std::hypot(s.coseismic_enu_m.x, s.coseismic_enu_m.y);
+    const double h = std::hypot(s.coseismic_enu_m.x, s.coseismic_enu_m.y);
     if (h > out.max_station_horiz_m) {
       out.max_station_horiz_m = h;
       out.max_station_up_m = s.coseismic_enu_m.z;
@@ -152,9 +148,8 @@ fuse_fault_states(const geo::Grid2D &grid,
         w_geo * geod.ftle_interseismic[i] +
         w_seis * (seis_anom.has_seismic ? seis_anom.grid_l_seis_pre[i] : 0.0);
 
-    out.before_susceptibility[i] =
-        0.45 * l_before + 0.30 * norm_shear[i] +
-        0.25 * pre_seis.grid_density[i];
+    out.before_susceptibility[i] = 0.45 * l_before + 0.30 * norm_shear[i] +
+                                   0.25 * pre_seis.grid_density[i];
 
     out.moved_intensity[i] =
         0.70 * norm_moved_u[i] + 0.30 * geod.ftle_coseismic[i];
@@ -163,9 +158,8 @@ fuse_fault_states(const geo::Grid2D &grid,
         w_geo * geod.ftle_coseismic[i] +
         w_seis * (seis_anom.has_seismic ? seis_anom.grid_l_seis_post[i] : 0.0);
 
-    out.after_state[i] =
-        0.45 * post_seis.grid_density[i] + 0.30 * l_after +
-        0.25 * norm_moved_u[i];
+    out.after_state[i] = 0.45 * post_seis.grid_density[i] + 0.30 * l_after +
+                         0.25 * norm_moved_u[i];
   }
 
   out.before_susceptibility = detail::normalize_01(out.before_susceptibility);

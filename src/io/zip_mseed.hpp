@@ -31,9 +31,8 @@ namespace detail {
 // Fast filter on TDVMS archive filenames of the form:
 // 1) `STA_YYYY-MM-DD.zip` (typically 21-day TDVMS blocks)
 // 2) `YYYYMMDDHHMM_YYYYMMDDHHMM_*.zip`
-[[nodiscard]] inline bool zip_filename_overlaps(std::string_view fname,
-                                                double min_mjd,
-                                                double max_mjd) {
+[[nodiscard]] inline bool
+zip_filename_overlaps(std::string_view fname, double min_mjd, double max_mjd) {
   // Pattern 1: look for `YYYY-MM-DD` anywhere in `fname`
   for (std::size_t i = 0; i + 10 <= fname.size(); ++i) {
     if (fname[i + 4] == '-' && fname[i + 7] == '-' &&
@@ -107,7 +106,8 @@ load_station_waveforms(const std::filesystem::path &station_dir, double min_mjd,
   std::string locked_channel;
   bool reached_max_mjd = false;
 
-  auto scan_buffer_prefix = [&](std::span<const std::uint8_t> buf) -> std::size_t {
+  auto scan_buffer_prefix =
+      [&](std::span<const std::uint8_t> buf) -> std::size_t {
     std::size_t pos = 0;
     while (pos + mseed::kRecordBytes <= buf.size()) {
       const auto hdr_span = buf.subspan(pos, mseed::kRecordBytes);
@@ -169,12 +169,10 @@ load_station_waveforms(const std::filesystem::path &station_dir, double min_mjd,
         zip_stat_t st;
         if (zip_stat_index(za, static_cast<zip_uint64_t>(idx), 0, &st) != 0)
           continue;
-        if ((st.valid & ZIP_STAT_SIZE) == 0 ||
-            st.size < mseed::kRecordBytes)
+        if ((st.valid & ZIP_STAT_SIZE) == 0 || st.size < mseed::kRecordBytes)
           continue;
 
-        zip_file_t *zf =
-            zip_fopen_index(za, static_cast<zip_uint64_t>(idx), 0);
+        zip_file_t *zf = zip_fopen_index(za, static_cast<zip_uint64_t>(idx), 0);
         if (!zf)
           continue;
 

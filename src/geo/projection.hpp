@@ -42,8 +42,7 @@ inline constexpr double kRadToDeg = 180.0 / std::numbers::pi;
   const double dl = deg2rad(lon2_deg - lon1_deg);
   const double s1 = std::sin(0.5 * dp);
   const double s2 = std::sin(0.5 * dl);
-  const double a =
-      s1 * s1 + std::cos(p1) * std::cos(p2) * s2 * s2;
+  const double a = s1 * s1 + std::cos(p1) * std::cos(p2) * s2 * s2;
   return 2.0 * kEarthRadiusKm * std::asin(std::sqrt(std::clamp(a, 0.0, 1.0)));
 }
 
@@ -91,7 +90,8 @@ private:
   double cos_lat0_{0.77714596145};
 };
 
-// Regular 2D geographic/metric grid over [lat_min, lat_max] x [lon_min, lon_max].
+// Regular 2D geographic/metric grid over [lat_min, lat_max] x [lon_min,
+// lon_max].
 struct Grid2D {
   LocalProjection proj;
   double lat_min{};
@@ -110,8 +110,8 @@ struct Grid2D {
     g.lon_min = lon_min;
     g.lon_max = lon_max;
     g.step_deg = step_deg;
-    g.proj = LocalProjection(0.5 * (lat_min + lat_max),
-                             0.5 * (lon_min + lon_max));
+    g.proj =
+        LocalProjection(0.5 * (lat_min + lat_max), 0.5 * (lon_min + lon_max));
     g.n_lat = static_cast<std::size_t>(
                   std::floor((lat_max - lat_min) / step_deg + 1e-9)) +
               1;

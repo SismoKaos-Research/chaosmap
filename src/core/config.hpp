@@ -106,10 +106,9 @@ struct CaseConfig {
 
     // Resolve relative paths against the repository root (parent of `configs/`)
     const auto cfg_abs = std::filesystem::absolute(path);
-    const auto repo_root =
-        (cfg_abs.parent_path().filename() == "configs")
-            ? cfg_abs.parent_path().parent_path()
-            : cfg_abs.parent_path();
+    const auto repo_root = (cfg_abs.parent_path().filename() == "configs")
+                               ? cfg_abs.parent_path().parent_path()
+                               : cfg_abs.parent_path();
     if (cfg.paths.gnss_dir.is_relative())
       cfg.paths.gnss_dir = repo_root / cfg.paths.gnss_dir;
     if (cfg.paths.out_dir.is_relative())

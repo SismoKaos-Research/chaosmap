@@ -53,7 +53,7 @@ struct SeismicStationSummary {
   double pre_ros_short_median{};
   double post_ros_short_median{};
   double delta_ros_short{};
-  double pre_horizon_max_z{};      // max robust z in last 15 days before event
+  double pre_horizon_max_z{};       // max robust z in last 15 days before event
   double pre_horizon_crossband_z{}; // cross-band anomaly in last 15 days
   double station_auc{0.5};
   std::vector<DailyStationLyapunov> daily;
@@ -106,8 +106,7 @@ window_overlaps_catalog(double w_start_mjd, double w_end_mjd,
   for (const auto &ev : events) {
     if (ev.magnitude < 4.3)
       continue;
-    const double ev_mjd =
-        40587.0 + static_cast<double>(ev.epoch_s) / 86400.0;
+    const double ev_mjd = 40587.0 + static_cast<double>(ev.epoch_s) / 86400.0;
     const double ev_end = ev_mjd + coda_duration_days(ev.magnitude);
     if (!(w_end_mjd < ev_mjd || w_start_mjd > ev_end))
       return true;
@@ -138,7 +137,8 @@ compute_robust_z(std::span<const double> x, std::span<const double> ref) {
   return out;
 }
 
-// Mann-Whitney / ROC AUC for binary labels (1 = pre-event horizon, 0 = background)
+// Mann-Whitney / ROC AUC for binary labels (1 = pre-event horizon, 0 =
+// background)
 [[nodiscard]] inline double
 roc_auc(std::span<const double> scores,
         std::span<const std::uint8_t> is_horizon) noexcept {
@@ -185,8 +185,7 @@ analyze_broadband_array(const core::CaseConfig &cfg,
   if (!std::filesystem::exists(cfg.paths.broadband_dir, ec))
     return out;
 
-  const auto coords =
-      io::read_station_coords_csv(cfg.paths.station_coords_csv);
+  const auto coords = io::read_station_coords_csv(cfg.paths.station_coords_csv);
 
   std::vector<std::filesystem::path> sta_dirs;
   for (const auto &entry :
@@ -232,8 +231,8 @@ analyze_broadband_array(const core::CaseConfig &cfg,
       if (sum.lat_deg == 0.0 && sum.lon_deg == 0.0)
         return;
 
-      sum.dist_to_hypo_km = geo::haversine_km(
-          sum.lat_deg, sum.lon_deg, cfg.event.lat, cfg.event.lon);
+      sum.dist_to_hypo_km = geo::haversine_km(sum.lat_deg, sum.lon_deg,
+                                              cfg.event.lat, cfg.event.lon);
 
       auto traces = io::load_station_waveforms(dir, min_mjd, max_mjd, "BH");
       if (traces.empty())
@@ -251,8 +250,8 @@ analyze_broadband_array(const core::CaseConfig &cfg,
       for (const auto &tr : traces) {
         if (tr.sample_rate_hz < 10.0)
           continue;
-        const auto win_n = static_cast<std::size_t>(
-            std::llround(kWinSec * tr.sample_rate_hz));
+        const auto win_n =
+            static_cast<std::size_t>(std::llround(kWinSec * tr.sample_rate_hz));
         // Sample one 10-minute background window every 3 hours (18 windows)
         const std::size_t stride_n = win_n * 18;
         if (tr.data.size() < win_n)
@@ -281,8 +280,8 @@ analyze_broadband_array(const core::CaseConfig &cfg,
           const auto filt_ctrl = dsp::preprocess_window(
               raw_span, tr.sample_rate_hz, kTargetFs, 0.5, 1.8);
           const auto x_ctrl_norm = chaos::zscore_normalize(filt_ctrl);
-          const double wolf_ctrl = chaos::wolf_lye_core(
-              x_ctrl_norm, kTargetFs, kTau, kDim, kEvolve);
+          const double wolf_ctrl =
+              chaos::wolf_lye_core(x_ctrl_norm, kTargetFs, kTau, kDim, kEvolve);
 
           if (std::isfinite(wf_fault.wolf_lye)) {
             const int day = static_cast<int>(std::floor(w_mjd));
@@ -318,8 +317,7 @@ analyze_broadband_array(const core::CaseConfig &cfg,
         d.wolf_fault = linalg::median(acc.wolf_f);
         d.wolf_ctrl =
             acc.wolf_c.empty() ? d.wolf_fault : linalg::median(acc.wolf_c);
-        d.ros_short_fault =
-            acc.ros_f.empty() ? 0.0 : linalg::median(acc.ros_f);
+        d.ros_short_fault = acc.ros_f.empty() ? 0.0 : linalg::median(acc.ros_f);
         d.samp_ent_fault = acc.se_f.empty() ? 0.0 : linalg::median(acc.se_f);
         d.corr_dim_fault = acc.cd_f.empty() ? 0.0 : linalg::median(acc.cd_f);
         sum.daily.push_back(d);
@@ -426,9 +424,9 @@ analyze_broadband_array(const core::CaseConfig &cfg,
       s2 += dv * dv;
     }
     ad.mean_z = m;
-    ad.spatial_std_z =
-        (zs.size() > 1) ? std::sqrt(s2 / static_cast<double>(zs.size() - 1))
-                        : std::abs(m);
+    ad.spatial_std_z = (zs.size() > 1)
+                           ? std::sqrt(s2 / static_cast<double>(zs.size() - 1))
+                           : std::abs(m);
     ad.max_z = mx;
     out.array_daily.push_back(ad);
 

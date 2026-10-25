@@ -21,9 +21,9 @@ struct SubFunctions {
 // Evaluates Okada (1985) Equations (28)-(29) at Chinnery integration corner
 // (xi, eta), given p = y cos(d) + d sin(d) and q = y sin(d) - d cos(d).
 // alpha = mu / (lambda + mu) = 1 - 2 * nu.
-[[nodiscard]] inline SubFunctions
-eval_I(double xi, double eta, double q, double sin_d, double cos_d,
-       double alpha) noexcept {
+[[nodiscard]] inline SubFunctions eval_I(double xi, double eta, double q,
+                                         double sin_d, double cos_d,
+                                         double alpha) noexcept {
   const double R = std::hypot(xi, eta, q);
   if (R < 1e-12)
     return {};
@@ -31,7 +31,8 @@ eval_I(double xi, double eta, double q, double sin_d, double cos_d,
   const double d_tilde = eta * sin_d - q * cos_d;
   const double R_eta = R + eta;
   const double R_dt = R + d_tilde;
-  const double ln_R_eta = (R_eta > 1e-12) ? std::log(R_eta) : -std::log(R - eta);
+  const double ln_R_eta =
+      (R_eta > 1e-12) ? std::log(R_eta) : -std::log(R - eta);
 
   SubFunctions s;
   if (std::abs(cos_d) > 1e-6) {
@@ -55,7 +56,7 @@ eval_I(double xi, double eta, double q, double sin_d, double cos_d,
              std::atan((eta * (X + q * cos_d) + X * (R + X) * sin_d) /
                        (xi * (R + X) * cos_d));
     }
-    s.I4 = alpha / cos_d * ( std::log(R_dt) - sin_d * ln_R_eta );
+    s.I4 = alpha / cos_d * (std::log(R_dt) - sin_d * ln_R_eta);
     s.I3 = alpha * (1.0 / cos_d * y_tilde / R_dt - ln_R_eta) +
            (sin_d / cos_d) * s.I4;
     s.I2 = alpha * (-ln_R_eta) - s.I3;
@@ -142,17 +143,17 @@ chinnery_corner(double xi, double eta, double q, double sin_d, double cos_d,
 // delta_deg: dip angle in degrees
 // U1, U2, U3: strike-slip (left-lateral > 0), dip-slip (thrust > 0), tensile
 // nu: Poisson's ratio (0.25 -> lambda == mu, alpha = 0.5)
-[[nodiscard]] inline linalg::Vec3
-okada85_local(double x, double y, double d, double delta_deg, double L,
-              double W, double U1, double U2, double U3 = 0.0,
-              double nu = 0.25) noexcept {
+[[nodiscard]] inline linalg::Vec3 okada85_local(double x, double y, double d,
+                                                double delta_deg, double L,
+                                                double W, double U1, double U2,
+                                                double U3 = 0.0,
+                                                double nu = 0.25) noexcept {
   const double d_rad = geo::deg2rad(delta_deg);
   const double sin_d = std::sin(d_rad);
   const double cos_d = std::cos(d_rad);
   const double p = y * cos_d + d * sin_d;
   const double q = y * sin_d - d * cos_d;
-  const double alpha =
-      (1.0 - 2.0 * nu); // mu / (lambda + mu) = (1 - 2*nu)
+  const double alpha = (1.0 - 2.0 * nu); // mu / (lambda + mu) = (1 - 2*nu)
 
   // Chinnery's notation (Eq. 24):
   // f(xi, eta)|| = f(x, p) - f(x, p - W) - f(x - L, p) + f(x - L, p - W)
@@ -192,9 +193,10 @@ struct FaultPatch {
 
 // Computes surface displacement (East, North, Up in metres) at observation
 // point `(obs_east_km, obs_north_km)` due to `patch`.
-[[nodiscard]] inline linalg::Vec3
-dislocation_enu(const FaultPatch &patch, double obs_east_km,
-                double obs_north_km, double nu = 0.25) noexcept {
+[[nodiscard]] inline linalg::Vec3 dislocation_enu(const FaultPatch &patch,
+                                                  double obs_east_km,
+                                                  double obs_north_km,
+                                                  double nu = 0.25) noexcept {
   const double str_rad = geo::deg2rad(patch.strike_deg);
   const double dip_rad = geo::deg2rad(patch.dip_deg);
   const double sin_s = std::sin(str_rad);
@@ -218,10 +220,9 @@ dislocation_enu(const FaultPatch &patch, double obs_east_km,
   const double d_bottom =
       std::max(0.2, patch.depth_km + 0.5 * patch.width_km * sin_d);
 
-  const auto u_loc =
-      okada85_local(x_ok, y_ok, d_bottom, patch.dip_deg, patch.length_km,
-                    patch.width_km, patch.slip_strike_m, patch.slip_dip_m, 0.0,
-                    nu);
+  const auto u_loc = okada85_local(
+      x_ok, y_ok, d_bottom, patch.dip_deg, patch.length_km, patch.width_km,
+      patch.slip_strike_m, patch.slip_dip_m, 0.0, nu);
 
   // Rotate (ux, uy, uz) back to (East, North, Up):
   const double u_east = u_loc.x * sin_s - u_loc.y * cos_s;

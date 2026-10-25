@@ -167,8 +167,8 @@ inline void export_case_results(
     f << "station,lat,lon,dist_km,ve_mm_yr,vn_mm_yr,vu_mm_yr,co_e_mm,co_n_mm,"
          "co_u_mm,co_horiz_mm,post_e_mm,post_n_mm,has_vel,has_coseismic\n";
     for (const auto &s : gnss_stations) {
-      const double dist = geo::haversine_km(s.lat_deg, s.lon_deg,
-                                            cfg.event.lat, cfg.event.lon);
+      const double dist =
+          geo::haversine_km(s.lat_deg, s.lon_deg, cfg.event.lat, cfg.event.lon);
       const double co_h =
           std::hypot(s.coseismic_enu_m.x, s.coseismic_enu_m.y) * 1000.0;
       f << s.station << ',' << s.lat_deg << ',' << s.lon_deg << ',' << dist
@@ -246,12 +246,13 @@ inline void export_case_results(
           << geod.dilatation_nanostrain_yr[idx] << ','
           << geod.ftle_interseismic[idx] << ',' << geod.ftle_coseismic[idx]
           << ',' << pre_seis.grid_density[idx] << ','
-          << post_seis.grid_density[idx] << ',' << seis_anom.grid_l_seis_pre[idx]
-          << ',' << seis_anom.grid_l_seis_post[idx] << ','
+          << post_seis.grid_density[idx] << ','
+          << seis_anom.grid_l_seis_pre[idx] << ','
+          << seis_anom.grid_l_seis_post[idx] << ','
           << seis_anom.grid_l_seis_change[idx] << ','
           << fused.before_susceptibility[idx] << ','
-          << fused.moved_surface_disp_m[idx] << ',' << fused.moved_intensity[idx]
-          << ',' << fused.after_state[idx] << ','
+          << fused.moved_surface_disp_m[idx] << ','
+          << fused.moved_intensity[idx] << ',' << fused.after_state[idx] << ','
           << fused.change_after_minus_before[idx] << '\n';
       }
     }
@@ -329,18 +330,14 @@ inline void export_case_results(
       const double hL = 0.5 * p.patch.length_km;
       const double hW =
           0.5 * p.patch.width_km * std::cos(geo::deg2rad(p.patch.dip_deg));
-      const auto c00 =
-          grid.proj.to_latlon((pc - s_hat * hL - d_hat * hW).x,
-                              (pc - s_hat * hL - d_hat * hW).y);
-      const auto c10 =
-          grid.proj.to_latlon((pc + s_hat * hL - d_hat * hW).x,
-                              (pc + s_hat * hL - d_hat * hW).y);
-      const auto c11 =
-          grid.proj.to_latlon((pc + s_hat * hL + d_hat * hW).x,
-                              (pc + s_hat * hL + d_hat * hW).y);
-      const auto c01 =
-          grid.proj.to_latlon((pc - s_hat * hL + d_hat * hW).x,
-                              (pc - s_hat * hL + d_hat * hW).y);
+      const auto c00 = grid.proj.to_latlon((pc - s_hat * hL - d_hat * hW).x,
+                                           (pc - s_hat * hL - d_hat * hW).y);
+      const auto c10 = grid.proj.to_latlon((pc + s_hat * hL - d_hat * hW).x,
+                                           (pc + s_hat * hL - d_hat * hW).y);
+      const auto c11 = grid.proj.to_latlon((pc + s_hat * hL + d_hat * hW).x,
+                                           (pc + s_hat * hL + d_hat * hW).y);
+      const auto c01 = grid.proj.to_latlon((pc - s_hat * hL + d_hat * hW).x,
+                                           (pc - s_hat * hL + d_hat * hW).y);
       f << ",\n    {\"type\": \"Feature\", \"properties\": {\"role\": "
            "\"slip_patch\", \"patch_id\": "
         << i << ", \"slip_m\": " << detail::safe_num(p.total_slip_m)

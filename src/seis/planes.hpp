@@ -66,7 +66,8 @@ fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
   }
   mean = mean * (1.0 / w_sum);
 
-  // Stage 1: 2D horizontal weighted PCA (East-North) for fault strike and length
+  // Stage 1: 2D horizontal weighted PCA (East-North) for fault strike and
+  // length
   double cxx = 0.0, cxy = 0.0, cyy = 0.0;
   for (std::size_t i = 0; i < events.size(); ++i) {
     const double dx = pts[i].x - mean.x;
@@ -77,7 +78,8 @@ fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
     cyy += wi * dy * dy;
   }
   const auto eig_xy = linalg::sym_eig2(cxx, cxy, cyy);
-  // eig_xy.values[1] >= eig_xy.values[0]; vectors[1] is along-strike unit vector
+  // eig_xy.values[1] >= eig_xy.values[0]; vectors[1] is along-strike unit
+  // vector
   const linalg::Vec2 major_xy = eig_xy.vectors[1];
   double strike_deg = geo::rad2deg(std::atan2(major_xy.x, major_xy.y));
   if (strike_deg < 0.0)
@@ -95,8 +97,9 @@ fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
   for (std::size_t i = 0; i < events.size(); ++i) {
     const double dx = pts[i].x - mean.x;
     const double dy = pts[i].y - mean.y;
-    const double u = dx * perp_x + dy * perp_y; // across-strike (+ to right, km)
-    const double v = (-pts[i].z) - (-mean.z);   // depth (+ downward, km)
+    const double u =
+        dx * perp_x + dy * perp_y;            // across-strike (+ to right, km)
+    const double v = (-pts[i].z) - (-mean.z); // depth (+ downward, km)
     if (std::abs(u) > 1.25 * sigma_perp)
       continue;
     const double wi = w[i];
@@ -111,8 +114,8 @@ fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
     cvv /= w_cs;
   }
 
-  // If cuv < 0, depth increases to the left of strike_deg, so flip strike by 180 deg
-  // to obey the right-hand rule (dip to the right of strike).
+  // If cuv < 0, depth increases to the left of strike_deg, so flip strike by
+  // 180 deg to obey the right-hand rule (dip to the right of strike).
   if (cuv < 0.0) {
     strike_deg = std::fmod(strike_deg + 180.0, 360.0);
     cuv = -cuv;
@@ -123,8 +126,8 @@ fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
   const auto eig_uv = linalg::sym_eig2(cuu, cuv, cvv);
   const double du = std::abs(eig_uv.vectors[1].x);
   const double dv = std::abs(eig_uv.vectors[1].y);
-  out.dip_deg = std::clamp(geo::rad2deg(std::atan2(dv, std::max(1e-6, du))),
-                           20.0, 89.0);
+  out.dip_deg =
+      std::clamp(geo::rad2deg(std::atan2(dv, std::max(1e-6, du))), 20.0, 89.0);
 
   out.thickness_km = std::sqrt(std::max(0.0, eig_uv.values[0]));
   out.width_km =
@@ -155,8 +158,8 @@ fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
   return out;
 }
 
-// Performs regional seismicity analysis (dominant plane, along-strike sub-planes,
-// and gridded density/planarity on `grid`).
+// Performs regional seismicity analysis (dominant plane, along-strike
+// sub-planes, and gridded density/planarity on `grid`).
 [[nodiscard]] inline SeismicityAnalysis
 analyze_seismicity(std::span<const io::CatalogEvent> events,
                    const geo::Grid2D &grid, std::size_t n_segments = 3) {

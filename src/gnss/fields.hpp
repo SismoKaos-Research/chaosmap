@@ -47,8 +47,8 @@ struct ProjectedVelStation {
 
 // Evaluates local affine velocity model v(x) = v0 + J * (x - x0) around
 // `(x0_km, y0_km)` using Gaussian distance weighting (Shen et al. 1996).
-// Returns {vE, vN} in m/yr and velocity gradient J = [dvE/dx, dvE/dy; dvN/dx, dvN/dy]
-// in units of (m/yr)/km = 1e-3 / yr = 1000 nanostrain/yr.
+// Returns {vE, vN} in m/yr and velocity gradient J = [dvE/dx, dvE/dy; dvN/dx,
+// dvN/dy] in units of (m/yr)/km = 1e-3 / yr = 1000 nanostrain/yr.
 [[nodiscard]] inline std::pair<linalg::Vec2, std::array<double, 4>>
 local_velocity_gradient(double x0_km, double y0_km,
                         std::span<const ProjectedVelStation> sta,
@@ -81,8 +81,8 @@ local_velocity_gradient(double x0_km, double y0_km,
     const double dx = s.x_km - x0_km;
     const double dy = s.y_km - y0_km;
     const double d2 = dx * dx + dy * dy;
-    const double w =
-        std::exp(-d2 * inv_2L2) / std::max(0.0005, 0.5 * (s.se_m_yr + s.sn_m_yr));
+    const double w = std::exp(-d2 * inv_2L2) /
+                     std::max(0.0005, 0.5 * (s.se_m_yr + s.sn_m_yr));
     X(row, 0) = w;
     X(row, 1) = w * dx;
     X(row, 2) = w * dy;
@@ -101,16 +101,15 @@ local_velocity_gradient(double x0_km, double y0_km,
 // Bilinear interpolation of a 2D vector field stored on `grid` at metric point
 // `(x_km, y_km)`.
 [[nodiscard]] inline linalg::Vec2
-sample_grid_vec(const geo::Grid2D &grid,
-                std::span<const linalg::Vec2> field, double x_km,
-                double y_km) noexcept {
+sample_grid_vec(const geo::Grid2D &grid, std::span<const linalg::Vec2> field,
+                double x_km, double y_km) noexcept {
   const auto ll = grid.proj.to_latlon(x_km, y_km);
-  const double rf =
-      std::clamp((ll.x - grid.lat_min) / grid.step_deg, 0.0,
-                 static_cast<double>(grid.n_lat > 1 ? grid.n_lat - 1 : 0) - 1e-6);
-  const double cf =
-      std::clamp((ll.y - grid.lon_min) / grid.step_deg, 0.0,
-                 static_cast<double>(grid.n_lon > 1 ? grid.n_lon - 1 : 0) - 1e-6);
+  const double rf = std::clamp(
+      (ll.x - grid.lat_min) / grid.step_deg, 0.0,
+      static_cast<double>(grid.n_lat > 1 ? grid.n_lat - 1 : 0) - 1e-6);
+  const double cf = std::clamp(
+      (ll.y - grid.lon_min) / grid.step_deg, 0.0,
+      static_cast<double>(grid.n_lon > 1 ? grid.n_lon - 1 : 0) - 1e-6);
   const auto r0 = static_cast<std::size_t>(std::floor(rf));
   const auto c0 = static_cast<std::size_t>(std::floor(cf));
   const std::size_t r1 = std::min(grid.n_lat - 1, r0 + 1);
@@ -169,22 +168,23 @@ compute_strain_and_ftle(std::span<const StationMotion> stations,
       const auto [v, J] = detail::local_velocity_gradient(pt.x, pt.y, psta);
       out.vel_enu_m_yr[idx] = v;
 
-      // J entries are in (m/yr)/km = 1e-6 / yr; multiply by 1000 for nanostrain/yr
+      // J entries are in (m/yr)/km = 1e-6 / yr; multiply by 1000 for
+      // nanostrain/yr
       const double exx = 1000.0 * J[0];
       const double exy = 500.0 * (J[1] + J[2]);
       const double eyy = 1000.0 * J[3];
       const double rot = 500.0 * (J[1] - J[2]);
 
-      out.max_shear_nanostrain_yr[idx] =
-          std::hypot(exx - eyy, 2.0 * exy);
+      out.max_shear_nanostrain_yr[idx] = std::hypot(exx - eyy, 2.0 * exy);
       out.dilatation_nanostrain_yr[idx] = exx + eyy;
       out.rotation_nanorad_yr[idx] = rot;
     }
   }
 
   // 2. Finite-Time Lyapunov Exponent (FTLE) via RK4 particle advection on the
-  //    scaled velocity field (advection horizon T_scale_km_per_m_yr = 800 yr*km/m
-  //    so a 20 mm/yr plate rate displaces tracers by ~16 km across shear zones).
+  //    scaled velocity field (advection horizon T_scale_km_per_m_yr = 800
+  //    yr*km/m so a 20 mm/yr plate rate displaces tracers by ~16 km across
+  //    shear zones).
   constexpr double kAdvectScale = 800.0;
   constexpr int kRkSteps = 8;
   const double dt = kAdvectScale / static_cast<double>(kRkSteps);
@@ -195,11 +195,14 @@ compute_strain_and_ftle(std::span<const StationMotion> stations,
       const double h = sign * dt;
       const auto k1 = detail::sample_grid_vec(grid, out.vel_enu_m_yr, x.x, x.y);
       const auto p2 = x + k1 * (0.5 * h);
-      const auto k2 = detail::sample_grid_vec(grid, out.vel_enu_m_yr, p2.x, p2.y);
+      const auto k2 =
+          detail::sample_grid_vec(grid, out.vel_enu_m_yr, p2.x, p2.y);
       const auto p3 = x + k2 * (0.5 * h);
-      const auto k3 = detail::sample_grid_vec(grid, out.vel_enu_m_yr, p3.x, p3.y);
+      const auto k3 =
+          detail::sample_grid_vec(grid, out.vel_enu_m_yr, p3.x, p3.y);
       const auto p4 = x + k3 * h;
-      const auto k4 = detail::sample_grid_vec(grid, out.vel_enu_m_yr, p4.x, p4.y);
+      const auto k4 =
+          detail::sample_grid_vec(grid, out.vel_enu_m_yr, p4.x, p4.y);
       x = x + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0);
     }
     return x;
@@ -266,7 +269,8 @@ compute_strain_and_ftle(std::span<const StationMotion> stations,
     }
   }
 
-  // Extract the principal ridge axis of the top-20% FTLE cells via weighted 2D PCA
+  // Extract the principal ridge axis of the top-20% FTLE cells via weighted 2D
+  // PCA
   double w_sum = 0.0, mx = 0.0, my = 0.0;
   for (std::size_t r = 0; r < grid.n_lat; ++r) {
     for (std::size_t c = 0; c < grid.n_lon; ++c) {

@@ -26,9 +26,9 @@ struct CandidateScore {
   bool available{false};
   double ridge_to_rupture_dist_km{999.0};
   double strike_misfit_deg{90.0};
-  double spatial_roc_auc{0.5};   // Grid cell discrimination within 25 km of fault
-  double temporal_pre_auc{0.5};  // Pre-mainshock horizon ROC AUC (L-seis)
-  double composite_skill{0.0};   // Overall [0, 1] skill score
+  double spatial_roc_auc{0.5}; // Grid cell discrimination within 25 km of fault
+  double temporal_pre_auc{0.5}; // Pre-mainshock horizon ROC AUC (L-seis)
+  double composite_skill{0.0};  // Overall [0, 1] skill score
   double assigned_weight{0.0};
 };
 
@@ -114,10 +114,10 @@ benchmark_lyapunov_candidates(const gnss::GeodeticGridFields &geod,
     const double prox_score =
         std::exp(-bm.l_geo.ridge_to_rupture_dist_km / 40.0);
     const double align_score = 1.0 - bm.l_geo.strike_misfit_deg / 90.0;
-    bm.l_geo.composite_skill = std::clamp(
-        0.45 * bm.l_geo.spatial_roc_auc + 0.30 * prox_score +
-            0.25 * align_score,
-        0.05, 1.0);
+    bm.l_geo.composite_skill =
+        std::clamp(0.45 * bm.l_geo.spatial_roc_auc + 0.30 * prox_score +
+                       0.25 * align_score,
+                   0.05, 1.0);
   }
 
   // Score L-seis
@@ -150,10 +150,9 @@ benchmark_lyapunov_candidates(const gnss::GeodeticGridFields &geod,
     const double s_sum = bm.l_geo.composite_skill + bm.l_seis.composite_skill;
     bm.l_geo.assigned_weight = bm.l_geo.composite_skill / s_sum;
     bm.l_seis.assigned_weight = bm.l_seis.composite_skill / s_sum;
-    bm.best_candidate =
-        (bm.l_seis.composite_skill >= bm.l_geo.composite_skill)
-            ? "Hybrid (L-seis primary + L-geo)"
-            : "Hybrid (L-geo primary + L-seis)";
+    bm.best_candidate = (bm.l_seis.composite_skill >= bm.l_geo.composite_skill)
+                            ? "Hybrid (L-seis primary + L-geo)"
+                            : "Hybrid (L-geo primary + L-seis)";
   } else if (bm.l_geo.available) {
     bm.l_geo.assigned_weight = 1.0;
     bm.l_seis.assigned_weight = 0.0;

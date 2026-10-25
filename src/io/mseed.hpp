@@ -149,8 +149,8 @@ struct ContinuousTrace {
   return std::string(p + a, b - a);
 }
 
-[[nodiscard]] inline bool
-parse_record_header(std::span<const std::uint8_t> rec, RecordHeader &hdr) {
+[[nodiscard]] inline bool parse_record_header(std::span<const std::uint8_t> rec,
+                                              RecordHeader &hdr) {
   if (rec.size() < kRecordBytes)
     return false;
   const char ind = static_cast<char>(rec[6]);
@@ -313,10 +313,14 @@ inline void decode_steim1_payload(std::span<const std::uint8_t> payload,
       const std::uint8_t *wp = fp + w * 4;
 
       if (ck == 1u) {
-        diffs.push_back(static_cast<std::int32_t>(static_cast<std::int8_t>(wp[0])));
-        diffs.push_back(static_cast<std::int32_t>(static_cast<std::int8_t>(wp[1])));
-        diffs.push_back(static_cast<std::int32_t>(static_cast<std::int8_t>(wp[2])));
-        diffs.push_back(static_cast<std::int32_t>(static_cast<std::int8_t>(wp[3])));
+        diffs.push_back(
+            static_cast<std::int32_t>(static_cast<std::int8_t>(wp[0])));
+        diffs.push_back(
+            static_cast<std::int32_t>(static_cast<std::int8_t>(wp[1])));
+        diffs.push_back(
+            static_cast<std::int32_t>(static_cast<std::int8_t>(wp[2])));
+        diffs.push_back(
+            static_cast<std::int32_t>(static_cast<std::int8_t>(wp[3])));
       } else if (ck == 2u) {
         diffs.push_back(static_cast<std::int32_t>(rd_i16_be(wp)));
         diffs.push_back(static_cast<std::int32_t>(rd_i16_be(wp + 2)));
@@ -410,11 +414,12 @@ assemble_traces(std::vector<DecodedRecord> &records) {
   if (records.empty())
     return traces;
 
-  std::ranges::sort(records, [](const DecodedRecord &a, const DecodedRecord &b) {
-    if (a.hdr.channel != b.hdr.channel)
-      return a.hdr.channel < b.hdr.channel;
-    return a.hdr.start_epoch_s < b.hdr.start_epoch_s;
-  });
+  std::ranges::sort(records,
+                    [](const DecodedRecord &a, const DecodedRecord &b) {
+                      if (a.hdr.channel != b.hdr.channel)
+                        return a.hdr.channel < b.hdr.channel;
+                      return a.hdr.start_epoch_s < b.hdr.start_epoch_s;
+                    });
 
   for (const auto &rec : records) {
     const double dt = 1.0 / rec.hdr.sample_rate_hz;
@@ -443,8 +448,7 @@ assemble_traces(std::vector<DecodedRecord> &records) {
       cur.data.insert(cur.data.end(), rec.samples.begin(), rec.samples.end());
     } else if (gap_s < -1.5 * dt) {
       // Overlapping duplicate record: append only non-overlapping tail if any
-      const auto skip =
-          static_cast<std::size_t>(std::llround(-gap_s / dt));
+      const auto skip = static_cast<std::size_t>(std::llround(-gap_s / dt));
       if (skip < rec.samples.size()) {
         cur.data.insert(cur.data.end(),
                         rec.samples.begin() + static_cast<std::ptrdiff_t>(skip),

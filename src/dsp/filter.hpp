@@ -86,8 +86,7 @@ butterworth_bandpass_sos(double fs, double fmin, double fmax, int order = 4) {
     const std::complex<double> s_plus = 0.5 * (b_pk + disc);
     const std::complex<double> s_minus = 0.5 * (b_pk - disc);
 
-    const double denom_norm =
-        std::abs(2.0 - s_plus) * std::abs(2.0 - s_minus);
+    const double denom_norm = std::abs(2.0 - s_plus) * std::abs(2.0 - s_minus);
     const double g = (denom_norm > 0.0) ? (2.0 * bw / denom_norm) : 0.0;
 
     for (const auto &sp : {s_plus, s_minus}) {

@@ -64,7 +64,8 @@ zscore_normalize(std::span<const double> x) {
   return out;
 }
 
-// Wolf (1985) maximum Lyapunov exponent matching `chaos_algorithms.py:wolf_lye_core`.
+// Wolf (1985) maximum Lyapunov exponent matching
+// `chaos_algorithms.py:wolf_lye_core`.
 [[nodiscard]] inline double wolf_lye_core(std::span<const double> x, double fs,
                                           int tau, int dim, int evolve) {
   const int N = static_cast<int>(x.size());
@@ -106,8 +107,8 @@ zscore_normalize(std::span<const double> x) {
   auto wolf_next_point = [&](int flag, int current_point, int pair_idx,
                              double &anglmx) -> int {
     const int ep = current_point + evolve;
-    const int end_idx =
-        (pair_idx + evolve < Y_rows) ? (pair_idx + evolve) : (pair_idx + evolve - 1);
+    const int end_idx = (pair_idx + evolve < Y_rows) ? (pair_idx + evolve)
+                                                     : (pair_idx + evolve - 1);
     const double end_dist = dist_rows(ep, end_idx);
     const double cos_thresh = std::cos(anglmx);
 
@@ -159,8 +160,8 @@ zscore_normalize(std::span<const double> x) {
   for (int i = 0; i < NPT; i += evolve) {
     const int ep = i + evolve;
     const bool safe = (current_point_pair + evolve < Y_rows) && (ep < Y_rows);
-    const int pair_ep =
-        safe ? (current_point_pair + evolve) : (current_point_pair + evolve - 1);
+    const int pair_ep = safe ? (current_point_pair + evolve)
+                             : (current_point_pair + evolve - 1);
 
     const double start_dist = dist_rows(i, current_point_pair);
     const double end_dist = dist_rows(ep, pair_ep);
@@ -199,7 +200,8 @@ fit_log_divergence(std::span<const double> ave_ln_div, double fs,
       break;
     }
   }
-  const int lo = static_cast<int>(std::llround(start_periods * mean_period * fs));
+  const int lo =
+      static_cast<int>(std::llround(start_periods * mean_period * fs));
   const int hi = static_cast<int>(std::llround(end_periods * mean_period * fs));
   if (lo < 0 || hi <= lo || hi >= usable || fs <= 0.0 || mean_period <= 0.0)
     return out;
@@ -292,9 +294,11 @@ rosenstein_lye_core(std::span<const double> x, double fs, int tau, int dim,
       bool go_left = false;
       if (left >= 0 && right < M) {
         const double dl =
-            xi - x[static_cast<std::size_t>(order[static_cast<std::size_t>(left)])];
-        const double dr =
-            x[static_cast<std::size_t>(order[static_cast<std::size_t>(right)])] - xi;
+            xi -
+            x[static_cast<std::size_t>(order[static_cast<std::size_t>(left)])];
+        const double dr = x[static_cast<std::size_t>(
+                              order[static_cast<std::size_t>(right)])] -
+                          xi;
         go_left = (dl <= dr);
       } else {
         go_left = (left >= 0);
@@ -441,8 +445,7 @@ rosenstein_lye_core(std::span<const double> x, double fs, int tau, int dim,
   constexpr int kBins = 200;
   const double log_e2 = std::log(eps2);
   const double log_e1 = std::log(eps1);
-  const double denom =
-      static_cast<double>(n - k) * static_cast<double>(n - k);
+  const double denom = static_cast<double>(n - k) * static_cast<double>(n - k);
   const double log_nk1 = std::log(static_cast<double>(n - k - 1));
 
   std::vector<double> eps(kBins);

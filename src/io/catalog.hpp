@@ -33,7 +33,8 @@ struct SeismicStation {
   double elevation_m{};
 };
 
-// Parses `DD/MM/YYYY HH:MM:SS` (or `YYYY-MM-DD HH:MM:SS`) into UTC epoch seconds.
+// Parses `DD/MM/YYYY HH:MM:SS` (or `YYYY-MM-DD HH:MM:SS`) into UTC epoch
+// seconds.
 [[nodiscard]] inline bool parse_catalog_time(std::string_view s,
                                              int64_t &out_epoch_s) noexcept {
   while (!s.empty() && (s.front() == ' ' || s.front() == '\t'))
@@ -51,12 +52,11 @@ struct SeismicStation {
     std::from_chars(s.data() + 14, s.data() + 16, mm);
     std::from_chars(s.data() + 17, s.data() + 19, ss);
     using namespace std::chrono;
-    const sys_days day =
-        year_month_day{std::chrono::year{c},
-                       std::chrono::month{static_cast<unsigned>(b)},
-                       std::chrono::day{static_cast<unsigned>(a)}};
-    out_epoch_s = day.time_since_epoch().count() * 86400LL + hh * 3600LL +
-                  mm * 60LL + ss;
+    const sys_days day = year_month_day{
+        std::chrono::year{c}, std::chrono::month{static_cast<unsigned>(b)},
+        std::chrono::day{static_cast<unsigned>(a)}};
+    out_epoch_s =
+        day.time_since_epoch().count() * 86400LL + hh * 3600LL + mm * 60LL + ss;
     return true;
   }
   if (s[4] == '-' && s[7] == '-') {
@@ -68,12 +68,11 @@ struct SeismicStation {
     std::from_chars(s.data() + 14, s.data() + 16, mm);
     std::from_chars(s.data() + 17, s.data() + 19, ss);
     using namespace std::chrono;
-    const sys_days day =
-        year_month_day{std::chrono::year{c},
-                       std::chrono::month{static_cast<unsigned>(b)},
-                       std::chrono::day{static_cast<unsigned>(a)}};
-    out_epoch_s = day.time_since_epoch().count() * 86400LL + hh * 3600LL +
-                  mm * 60LL + ss;
+    const sys_days day = year_month_day{
+        std::chrono::year{c}, std::chrono::month{static_cast<unsigned>(b)},
+        std::chrono::day{static_cast<unsigned>(a)}};
+    out_epoch_s =
+        day.time_since_epoch().count() * 86400LL + hh * 3600LL + mm * 60LL + ss;
     return true;
   }
   return false;

@@ -101,10 +101,9 @@ int main(int argc, char **argv) {
   const geo::LocalProjection proj(cfg.event.lat, cfg.event.lon);
   const auto inv = okada::invert_fault(
       gnss_models, proj, cfg.event.mw_ref, cfg.event.depth_km,
-      cfg.event.strike_hint_deg, cfg.event.dip_hint_deg, cfg.event.rake_hint_deg,
-      cfg.event.is_strike_slip);
-  std::cout << std::setprecision(2)
-            << "[2/6] Okada 1985 Slip Inversion:\n"
+      cfg.event.strike_hint_deg, cfg.event.dip_hint_deg,
+      cfg.event.rake_hint_deg, cfg.event.is_strike_slip);
+  std::cout << std::setprecision(2) << "[2/6] Okada 1985 Slip Inversion:\n"
             << "      Fault Plane: strike=" << inv.plane.strike_deg
             << " deg, dip=" << inv.plane.dip_deg
             << " deg, rake=" << inv.mean_rake_deg << " deg\n"

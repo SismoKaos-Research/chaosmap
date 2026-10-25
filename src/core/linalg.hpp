@@ -113,8 +113,7 @@ public:
     return t;
   }
 
-  [[nodiscard]] std::vector<double>
-  mul_vec(std::span<const double> x) const {
+  [[nodiscard]] std::vector<double> mul_vec(std::span<const double> x) const {
     assert(x.size() == cols_);
     std::vector<double> y(rows_, 0.0);
     for (std::size_t c = 0; c < cols_; ++c) {
@@ -146,9 +145,9 @@ private:
 
 struct LsqResult {
   std::vector<double> x;
-  Mat cov;            // (n x n) unscaled covariance (A^T W A)^+
-  double rss{0.0};    // weighted residual sum of squares
-  int dof{0};         // m - rank
+  Mat cov;         // (n x n) unscaled covariance (A^T W A)^+
+  double rss{0.0}; // weighted residual sum of squares
+  int dof{0};      // m - rank
   int rank{0};
 };
 
@@ -176,7 +175,7 @@ solve_lstsq(Mat A, std::span<const double> b, double rcond = 1e-10) {
           &rank, &wkopt, &lwork, &iwkopt, &info);
   lwork = std::max(1, static_cast<int>(wkopt));
   std::vector<double> work(static_cast<std::size_t>(lwork));
-  std::vector<int> iwork(static_cast<std::size_t>( std::max(1, iwkopt)));
+  std::vector<int> iwork(static_cast<std::size_t>(std::max(1, iwkopt)));
 
   dgelsd_(&m, &n, &nrhs, A.data(), &lda, rhs.data(), &ldb, s.data(), &rcond,
           &rank, work.data(), &lwork, iwork.data(), &info);
@@ -186,10 +185,12 @@ solve_lstsq(Mat A, std::span<const double> b, double rcond = 1e-10) {
 
 // Weighted linear least squares min ||sqrt(w) (A x - b)||_2^2 with full
 // pseudoinverse covariance via SVD (`dgesvd_`).
-// `sigma` holds the 1-sigma measurement uncertainties per row (w_i = 1/sigma_i^2).
-[[nodiscard]] inline LsqResult
-solve_wls(const Mat &A, std::span<const double> b,
-          std::span<const double> sigma, double rcond = 1e-10) {
+// `sigma` holds the 1-sigma measurement uncertainties per row (w_i =
+// 1/sigma_i^2).
+[[nodiscard]] inline LsqResult solve_wls(const Mat &A,
+                                         std::span<const double> b,
+                                         std::span<const double> sigma,
+                                         double rcond = 1e-10) {
   const std::size_t m = A.rows();
   const std::size_t n = A.cols();
   LsqResult res;
@@ -234,8 +235,7 @@ solve_wls(const Mat &A, std::span<const double> b,
   std::vector<double> inv_s(static_cast<std::size_t>(k), 0.0);
   for (int r = 0; r < k; ++r) {
     if (S[static_cast<std::size_t>(r)] > thresh) {
-      inv_s[static_cast<std::size_t>(r)] =
-          1.0 / S[static_cast<std::size_t>(r)];
+      inv_s[static_cast<std::size_t>(r)] = 1.0 / S[static_cast<std::size_t>(r)];
       ++rank;
     }
   }
@@ -262,9 +262,8 @@ solve_wls(const Mat &A, std::span<const double> b,
       continue;
     for (std::size_t j = 0; j < n; ++j)
       for (std::size_t i = 0; i < n; ++i)
-        res.cov(i, j) +=
-            VT(static_cast<std::size_t>(r), i) *
-            VT(static_cast<std::size_t>(r), j) * is2;
+        res.cov(i, j) += VT(static_cast<std::size_t>(r), i) *
+                         VT(static_cast<std::size_t>(r), j) * is2;
   }
 
   const auto fit = Aw.mul_vec(res.x);
@@ -283,7 +282,8 @@ struct Eig2 {
 };
 
 // Closed-form 2x2 symmetric eigendecomposition for [a00 a01; a01 a11].
-[[nodiscard]] inline Eig2 sym_eig2(double a00, double a01, double a11) noexcept {
+[[nodiscard]] inline Eig2 sym_eig2(double a00, double a01,
+                                   double a11) noexcept {
   const double tr = 0.5 * (a00 + a11);
   const double diff = 0.5 * (a00 - a11);
   const double disc = std::hypot(diff, a01);
@@ -301,7 +301,8 @@ struct Eig2 {
 }
 
 struct Eig3 {
-  std::array<double, 3> values{}; // ascending: values[0] <= values[1] <= values[2]
+  std::array<double, 3>
+      values{}; // ascending: values[0] <= values[1] <= values[2]
   std::array<Vec3, 3> vectors{};
 };
 
@@ -350,7 +351,8 @@ struct Eig3 {
   std::ranges::sort(v);
   if (v.size() == 1)
     return v[0];
-  const double pos = std::clamp(q, 0.0, 1.0) * static_cast<double>(v.size() - 1);
+  const double pos =
+      std::clamp(q, 0.0, 1.0) * static_cast<double>(v.size() - 1);
   const auto idx = static_cast<std::size_t>(std::floor(pos));
   const double frac = pos - static_cast<double>(idx);
   if (idx + 1 >= v.size())
