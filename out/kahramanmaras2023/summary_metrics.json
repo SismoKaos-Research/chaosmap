@@ -28,7 +28,7 @@
     "mean_slip_m": 5.55379
   },
   "before_vs_after_fault_comparison": {
-    "before_strike_deg": 239.33195,
+    "before_strike_deg": 59.33195,
     "coseismic_strike_deg": 213.50000,
     "after_strike_deg": 50.22591,
     "strike_change_deg": 25.83195,
@@ -36,7 +36,8 @@
     "pre_events_count": 1887,
     "post_aftershocks_count": 7762,
     "post_aftershock_length_km": 277.00094,
-    "post_aftershock_dip_deg": 0.81338
+    "post_aftershock_dip_deg": null,
+    "post_aftershock_free_depth_count": 3186
   },
   "lyapunov_benchmark": {
     "selected_mode": "L-geo (GNSS Lagrangian FTLE)",

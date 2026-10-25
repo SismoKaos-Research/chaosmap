@@ -36,7 +36,8 @@
     "pre_events_count": 2114,
     "post_aftershocks_count": 6579,
     "post_aftershock_length_km": 79.67927,
-    "post_aftershock_dip_deg": 3.36395
+    "post_aftershock_dip_deg": null,
+    "post_aftershock_free_depth_count": 1916
   },
   "lyapunov_benchmark": {
     "selected_mode": "Hybrid (L-seis primary + L-geo)",
