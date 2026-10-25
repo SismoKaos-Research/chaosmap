@@ -1,0 +1,32 @@
+[event]
+id = "kahramanmaras2023"
+name = "2023-02-06 Kahramanmaras Mw 7.8 / 7.5"
+date = "2023-02-06"
+origin_utc = "2023-02-06T01:17:35"
+mjd = 59981.0
+origin_epoch_s = 1675646255
+lat = 37.520
+lon = 37.120
+depth_km = 10.0
+mw_ref = 7.8
+strike_hint_deg = 228.0
+dip_hint_deg = 85.0
+rake_hint_deg = 8.0
+is_strike_slip = true
+
+[region]
+lat_min = 35.8
+lat_max = 39.0
+lon_min = 35.2
+lon_max = 39.6
+grid_step_deg = 0.06
+max_gnss_dist_km = 250.0
+max_seis_dist_km = 160.0
+
+[paths]
+gnss_dir = "data/gnss"
+catalog_csv = "/home/oguzb/Projects/sismokaos/chaos/catalog_current.csv"
+station_coords_csv = "/home/oguzb/Projects/sismokaos/chaos/station_coords.csv"
+broadband_dir = "/home/oguzb/data/sismokaos/tdvms/elazig_raw"
+broadband_stations = []
+out_dir = "out/kahramanmaras2023"

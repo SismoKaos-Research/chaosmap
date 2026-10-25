@@ -1,0 +1,5 @@
+# downloaded / derived data
+/data/
+# build trees
+/build*/
+__pycache__/

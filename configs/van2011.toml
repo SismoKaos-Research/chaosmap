@@ -1,0 +1,32 @@
+[event]
+id = "van2011"
+name = "2011-10-23 Van-Ercis Mw 7.1"
+date = "2011-10-23"
+origin_utc = "2011-10-23T10:41:21"
+mjd = 55857.0
+origin_epoch_s = 1319366481
+lat = 38.721
+lon = 43.508
+depth_km = 14.0
+mw_ref = 7.1
+strike_hint_deg = 248.0
+dip_hint_deg = 48.0
+rake_hint_deg = 76.0
+is_strike_slip = false
+
+[region]
+lat_min = 37.4
+lat_max = 40.0
+lon_min = 41.8
+lon_max = 45.0
+grid_step_deg = 0.05
+max_gnss_dist_km = 240.0
+max_seis_dist_km = 95.0
+
+[paths]
+gnss_dir = "data/gnss"
+catalog_csv = "/home/oguzb/Projects/sismokaos/chaos/catalog_current.csv"
+station_coords_csv = "/home/oguzb/Projects/sismokaos/chaos/station_coords.csv"
+broadband_dir = "/home/oguzb/data/sismokaos/tdvms/van_raw"
+broadband_stations = ["DYDN", "GEVA", "TVAN", "VMUR"]
+out_dir = "out/van2011"
