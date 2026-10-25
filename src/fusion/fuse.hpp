@@ -123,14 +123,25 @@ normalize_01(std::span<const double> v) {
   }
 
   // 3. Forward Okada surface displacement field on `grid` from distributed
-  // slip patches
+  // slip patches. Patch centroids are stored in the inversion's
+  // (epicentre-centred) projection, so re-express them in the grid projection
+  // through their geographic coordinates first.
+  std::vector<okada::FaultPatch> grid_patches;
+  grid_patches.reserve(inv.patches.size());
+  for (const auto &sp : inv.patches) {
+    okada::FaultPatch p = sp.patch;
+    const auto enu = grid.proj.to_enu(sp.lat_deg, sp.lon_deg);
+    p.east_km = enu.x;
+    p.north_km = enu.y;
+    grid_patches.push_back(p);
+  }
   for (std::size_t r = 0; r < grid.n_lat; ++r) {
     for (std::size_t c = 0; c < grid.n_lon; ++c) {
       const std::size_t idx = r * grid.n_lon + c;
       const auto pt = grid.enu_at(r, c);
       linalg::Vec3 u_tot{};
-      for (const auto &sp : inv.patches) {
-        u_tot = u_tot + okada::dislocation_enu(sp.patch, pt.x, pt.y);
+      for (const auto &p : grid_patches) {
+        u_tot = u_tot + okada::dislocation_enu(p, pt.x, pt.y);
       }
       out.moved_surface_disp_m[idx] = std::hypot(u_tot.x, u_tot.y);
     }
@@ -182,7 +193,8 @@ normalize_01(std::span<const double> v) {
   out.strike_change_deg = detail::axial_angle_diff_deg(
       out.before_strike_deg, out.coseismic_strike_deg);
 
-  // Centroid of top 15% of `before_susceptibility` vs `moved_intensity`
+  // Centroid of the cells with normalized value >= 0.75 in
+  // `before_susceptibility` vs `moved_intensity`
   auto top_centroid = [&](const std::vector<double> &g) -> linalg::Vec2 {
     double sw = 0.0, cx = 0.0, cy = 0.0;
     for (std::size_t r = 0; r < grid.n_lat; ++r) {

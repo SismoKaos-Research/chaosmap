@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Renders publication-grade 4-panel Before / Moved / After / Change fault maps
-from chaosmap output directories using PyCairo (PNG + SVG, zero numpy/matplotlib
+from chaosmap output directories using PyCairo (PNG, zero numpy/matplotlib
 dependency).
 """
 

@@ -27,6 +27,7 @@ max_seis_dist_km = 95.0
 gnss_dir = "data/gnss"
 catalog_csv = "/home/oguzb/Projects/sismokaos/chaos/catalog_current.csv"
 station_coords_csv = "/home/oguzb/Projects/sismokaos/chaos/station_coords.csv"
+afad_station_catalog_csv = "/home/oguzb/Projects/sismokaos/data_downloader/catalogs/istasyon_katalog.csv"
 broadband_dir = "/home/oguzb/data/sismokaos/tdvms/van_raw"
 broadband_stations = ["DYDN", "GEVA", "TVAN", "VMUR"]
 out_dir = "out/van2011"

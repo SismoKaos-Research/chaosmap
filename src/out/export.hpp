@@ -282,7 +282,7 @@ inline void export_case_results(
     const linalg::Vec2 s_hat{std::sin(s_rad), std::cos(s_rad)};
     const linalg::Vec2 d_hat{std::cos(s_rad), -std::sin(s_rad)};
 
-    emit_line("coseismic_fault_trace", "Inverted Coseismic Fault Trace",
+    emit_line("coseismic_fault_trace", "Inverted Fault Upper-Edge Projection",
               inv.trace_start_lat, inv.trace_start_lon, inv.trace_end_lat,
               inv.trace_end_lon, inv.plane.strike_deg, inv.plane.dip_deg);
 

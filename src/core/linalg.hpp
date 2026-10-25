@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <numbers>
 #include <numeric>
 #include <span>

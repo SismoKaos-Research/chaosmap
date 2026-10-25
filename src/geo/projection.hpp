@@ -6,6 +6,7 @@
 
 #include "core/linalg.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <numbers>
@@ -46,9 +47,11 @@ inline constexpr double kRadToDeg = 180.0 / std::numbers::pi;
   return 2.0 * kEarthRadiusKm * std::asin(std::sqrt(std::clamp(a, 0.0, 1.0)));
 }
 
-// Local azimuthal-equidistant / tangent-plane projection centered at
-// (lat0_deg, lon0_deg), returning (east_km, north_km) accurate to <0.05% across
-// 300 km regional boxes.
+// Local equirectangular projection centered at (lat0_deg, lon0_deg), scaling
+// longitude by the cosine of the mean latitude of each point and the center,
+// returning (east_km, north_km). Distances from the center agree with
+// great-circle distances to <0.05% across 300 km regional boxes; `to_latlon`
+// is its exact inverse.
 class LocalProjection {
 public:
   constexpr LocalProjection() = default;

@@ -22,7 +22,8 @@ struct SubPatchResult {
   double lon_deg{};
   double total_slip_m{};
   double rake_deg{};
-  double resolution{}; // diagonal of model resolution matrix R_ii in [0, 1]
+  double resolution{}; // mean of the patch's two diagonal entries of the model
+                       // resolution matrix R, in [0, 1]
 };
 
 struct InversionResult {
@@ -222,7 +223,8 @@ invert_fault(std::span<const gnss::StationMotion> all_stations,
   out.center_lat_deg = center_ll.x;
   out.center_lon_deg = center_ll.y;
 
-  // Up-dip surface projection of the fault top edge (fault trace):
+  // Surface projection of the fault's upper edge (the trace of a blind fault;
+  // not extrapolated up-dip to the surface):
   const double str_rad = geo::deg2rad(best.strike_deg);
   const double dip_rad = geo::deg2rad(best.dip_deg);
   const double sin_s = std::sin(str_rad);
@@ -380,9 +382,17 @@ invert_fault(std::span<const gnss::StationMotion> all_stations,
     }
   }
 
-  const auto sol = linalg::solve_lstsq(A_aug, b_aug);
+  // SVD solve of the augmented system. Its pseudoinverse covariance
+  // (A^T A)^-1 also gives the model resolution matrix R = (A^T A)^-1 Gd^T Gd.
+  const auto lsq = linalg::solve_wls(A_aug, b_aug, {});
+  const auto &sol = lsq.x;
+  const auto gtg = Gd.transpose().mul(Gd);
+  std::vector<double> r_diag(n_params, 0.0);
+  for (std::size_t j = 0; j < n_params; ++j) {
+    for (std::size_t k = 0; k < n_params; ++k)
+      r_diag[j] += lsq.cov(j, k) * gtg(k, j);
+  }
 
-  // Compute patch resolution proxy from column norms of Gd vs regularization
   out.patches.resize(n_patches);
   double sum_slip = 0.0;
   double max_slip = 0.0;
@@ -397,12 +407,8 @@ invert_fault(std::span<const gnss::StationMotion> all_stations,
     const double rake = geo::rad2deg(std::atan2(p.slip_dip_m, p.slip_strike_m));
     const auto ll = proj.to_latlon(p.east_km, p.north_km);
 
-    double g_col2 = 0.0;
-    for (std::size_t r = 0; r < n_obs; ++r) {
-      g_col2 += Gd(r, 2 * j + 0) * Gd(r, 2 * j + 0) +
-                Gd(r, 2 * j + 1) * Gd(r, 2 * j + 1);
-    }
-    const double res = g_col2 / (g_col2 + lambda * lambda);
+    const double res =
+        std::clamp(0.5 * (r_diag[2 * j + 0] + r_diag[2 * j + 1]), 0.0, 1.0);
 
     out.patches[j] = SubPatchResult{
         .patch = p,

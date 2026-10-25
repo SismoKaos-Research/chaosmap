@@ -36,18 +36,7 @@ struct SubFunctions {
 
   SubFunctions s;
   if (std::abs(cos_d) > 1e-6) {
-    // General dip (Eq. 28)
-    s.I5 = (std::abs(xi) < 1e-12)
-               ? 0.0
-               : alpha * 2.0 / cos_d *
-                     std::atan((eta * (R + q * cos_d) +
-                                R * (R + std::abs(xi)) * sin_d) /
-                               (xi * (R + std::abs(xi)) * cos_d));
-    if (xi < 0.0) {
-      // atan above uses |xi| in denominator factor (R+|xi|), xi sign already in
-      // denominator
-    }
-    // More direct form of Eq. (28) for I5:
+    // General dip (Eq. 28), with X = sqrt(xi^2 + q^2)
     const double X = std::hypot(xi, q);
     if (std::abs(xi) < 1e-12) {
       s.I5 = 0.0;
