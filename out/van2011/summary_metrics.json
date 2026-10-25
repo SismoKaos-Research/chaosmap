@@ -7,14 +7,14 @@
   "how_much_it_moved": {
     "max_disp_station": "MRDY",
     "max_station_horiz_m": 0.06002,
-    "max_station_horiz_mm": 60.01635,
+    "max_station_horiz_mm": 60.02140,
     "max_station_up_m": -0.01216,
-    "peak_fault_slip_m": 2.48135,
-    "top_quartile_fault_slip_m": 2.43208,
-    "mean_fault_slip_m": 2.15151,
-    "geodetic_moment_nm": 5.29608e+19,
-    "geodetic_mw": 7.08264,
-    "variance_reduction_pct": 97.38932
+    "peak_fault_slip_m": 2.48153,
+    "top_quartile_fault_slip_m": 2.43231,
+    "mean_fault_slip_m": 2.15189,
+    "geodetic_moment_nm": 5.29701e+19,
+    "geodetic_mw": 7.08269,
+    "variance_reduction_pct": 97.39052
   },
   "coseismic_fault_geometry": {
     "center_lat": 38.70751,
@@ -24,39 +24,39 @@
     "width_km": 18.28100,
     "strike_deg": 248.00000,
     "dip_deg": 50.50000,
-    "mean_rake_deg": 68.10607,
-    "mean_slip_m": 2.15151
+    "mean_rake_deg": 68.10769,
+    "mean_slip_m": 2.15189
   },
   "before_vs_after_fault_comparison": {
     "before_strike_deg": 149.30969,
     "coseismic_strike_deg": 248.00000,
     "after_strike_deg": 60.14716,
     "strike_change_deg": 81.30969,
-    "centroid_shift_km": 75.89517,
+    "centroid_shift_km": 54.75909,
     "pre_events_count": 2114,
     "post_aftershocks_count": 6579,
     "post_aftershock_length_km": 79.67927,
-    "post_aftershock_dip_deg": 20.00000
+    "post_aftershock_dip_deg": 3.36395
   },
   "lyapunov_benchmark": {
     "selected_mode": "Hybrid (L-seis primary + L-geo)",
     "l_geo": {
       "available": true,
-      "ridge_to_rupture_dist_km": 115.92589,
-      "strike_misfit_deg": 61.42810,
-      "spatial_roc_auc": 0.53130,
-      "composite_skill": 0.33499,
-      "assigned_weight": 0.31201
+      "ridge_to_rupture_dist_km": 48.44709,
+      "strike_misfit_deg": 42.32271,
+      "spatial_roc_auc": 0.55293,
+      "composite_skill": 0.47061,
+      "assigned_weight": 0.38673
     },
     "l_seis": {
       "available": true,
-      "ridge_to_rupture_dist_km": 19.27336,
-      "strike_misfit_deg": 30.84838,
-      "spatial_roc_auc": 0.89823,
-      "temporal_pre_auc": 0.73333,
+      "ridge_to_rupture_dist_km": 36.22442,
+      "strike_misfit_deg": 14.89770,
+      "spatial_roc_auc": 0.87219,
+      "temporal_pre_auc": 0.86667,
       "null_p_value": 0.12500,
-      "composite_skill": 0.73866,
-      "assigned_weight": 0.68799
+      "composite_skill": 0.74629,
+      "assigned_weight": 0.61327
     }
   }
 }
