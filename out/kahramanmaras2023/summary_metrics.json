@@ -1,0 +1,62 @@
+{
+  "case_id": "kahramanmaras2023",
+  "event_name": "2023-02-06 Kahramanmaras Mw 7.8 / 7.5",
+  "date_iso": "2023-02-06",
+  "event_mjd": 59981.00000,
+  "hypocentre": {"lat": 37.52000, "lon": 37.12000, "depth_km": 10.00000, "catalog_mw": 7.80000},
+  "how_much_it_moved": {
+    "max_disp_station": "EKZ1",
+    "max_station_horiz_m": 4.67160,
+    "max_station_horiz_mm": 4671.60223,
+    "max_station_up_m": -0.12702,
+    "peak_fault_slip_m": 22.04696,
+    "top_quartile_fault_slip_m": 11.99156,
+    "mean_fault_slip_m": 5.55398,
+    "geodetic_moment_nm": 5.92674e+20,
+    "geodetic_mw": 7.78188,
+    "variance_reduction_pct": 77.46744
+  },
+  "coseismic_fault_geometry": {
+    "center_lat": 37.68188,
+    "center_lon": 36.91568,
+    "center_depth_km": 16.77671,
+    "length_km": 116.16893,
+    "width_km": 30.61963,
+    "strike_deg": 213.50000,
+    "dip_deg": 85.00000,
+    "mean_rake_deg": 11.72251,
+    "mean_slip_m": 5.55398
+  },
+  "before_vs_after_fault_comparison": {
+    "before_strike_deg": 239.33195,
+    "coseismic_strike_deg": 213.50000,
+    "after_strike_deg": 50.22591,
+    "strike_change_deg": 25.83195,
+    "centroid_shift_km": 136.10259,
+    "pre_events_count": 1887,
+    "post_aftershocks_count": 7762,
+    "post_aftershock_length_km": 250.00000,
+    "post_aftershock_dip_deg": 20.00000
+  },
+  "lyapunov_benchmark": {
+    "selected_mode": "L-geo (GNSS Lagrangian FTLE)",
+    "l_geo": {
+      "available": true,
+      "ridge_to_rupture_dist_km": 142.76644,
+      "strike_misfit_deg": 81.99018,
+      "spatial_roc_auc": 0.66789,
+      "composite_skill": 0.33126,
+      "assigned_weight": 1.00000
+    },
+    "l_seis": {
+      "available": false,
+      "ridge_to_rupture_dist_km": 999.00000,
+      "strike_misfit_deg": 90.00000,
+      "spatial_roc_auc": 0.50000,
+      "temporal_pre_auc": 0.50000,
+      "null_p_value": 1.00000,
+      "composite_skill": 0.00000,
+      "assigned_weight": 0.00000
+    }
+  }
+}
