@@ -140,8 +140,11 @@ read_catalog_csv(const std::filesystem::path &path, double lat_min = -90.0,
   return out;
 }
 
+// Reads `path` (Network,Station,Latitude,Longitude[,Elevation]) and, if given,
+// appends the AFAD station catalogue `afad_catalog` (Longitude,Latitude order).
 [[nodiscard]] inline std::vector<SeismicStation>
-read_station_coords_csv(const std::filesystem::path &path) {
+read_station_coords_csv(const std::filesystem::path &path,
+                        const std::filesystem::path &afad_catalog = {}) {
   std::vector<SeismicStation> out;
   auto strip_quotes = [](std::string s) {
     std::erase_if(s, [](char c) { return c == '"' || c == '\r' || c == ' '; });
@@ -181,12 +184,10 @@ read_station_coords_csv(const std::filesystem::path &path) {
     }
   };
   parse_file(path, false);
-  const std::filesystem::path afad_cat =
-      "/home/oguzb/Projects/sismokaos/data_downloader/catalogs/"
-      "istasyon_katalog.csv";
   std::error_code ec;
-  if (path != afad_cat && std::filesystem::exists(afad_cat, ec)) {
-    parse_file(afad_cat, true);
+  if (!afad_catalog.empty() && afad_catalog != path &&
+      std::filesystem::exists(afad_catalog, ec)) {
+    parse_file(afad_catalog, true);
   }
   return out;
 }

@@ -44,6 +44,8 @@ struct StationMotion {
 
 namespace detail {
 
+inline constexpr double kOneYearDays = 365.25;
+
 [[nodiscard]] inline double component_val(const io::Tenv3Sample &s,
                                           int c) noexcept {
   return c == 0 ? s.east_m : (c == 1 ? s.north_m : s.up_m);
@@ -54,8 +56,10 @@ namespace detail {
   return c == 0 ? s.sig_e_m : (c == 1 ? s.sig_n_m : s.sig_u_m);
 }
 
-// MIDAS-style 1-year pair median velocity on pre-event samples, skipping pairs
-// that straddle known equipment steps or large (M >= 6.0) earthquake steps.
+// MIDAS-style 1-year pair median velocity on pre-event samples (Blewitt et al.
+// 2016): each sample is paired with the first sample at least one year later
+// (within 15 days), so annual signals cancel; pairs that straddle a step in
+// `step_mjds` are skipped.
 [[nodiscard]] inline std::pair<double, double>
 midas_component_velocity(std::span<const io::Tenv3Sample> samples,
                          std::span<const double> step_mjds, double max_mjd,
@@ -66,7 +70,8 @@ midas_component_velocity(std::span<const io::Tenv3Sample> samples,
     const double t1 = samples[i].mjd;
     if (t1 >= max_mjd)
       break;
-    while (j_start < samples.size() && samples[j_start].mjd - t1 < 350.0)
+    while (j_start < samples.size() &&
+           samples[j_start].mjd - t1 < kOneYearDays - 0.5)
       ++j_start;
     for (std::size_t j = j_start; j < samples.size(); ++j) {
       const double t2 = samples[j].mjd;
@@ -81,8 +86,8 @@ midas_component_velocity(std::span<const io::Tenv3Sample> samples,
         }
       }
       if (crosses_step)
-        continue;
-      const double dt_yr = (t2 - t1) / 365.25;
+        break; // later partners straddle the same step
+      const double dt_yr = (t2 - t1) / kOneYearDays;
       const double dx =
           component_val(samples[j], comp) - component_val(samples[i], comp);
       slopes.push_back(dx / dt_yr);
@@ -105,9 +110,9 @@ midas_component_velocity(std::span<const io::Tenv3Sample> samples,
   const double v_hat = trimmed.empty() ? med : linalg::median(trimmed);
   const double sig_hat =
       trimmed.empty() ? mad : linalg::mad_sigma(trimmed, v_hat);
-  // Effective independent 1-yr pairs scale roughly with sqrt(N / 4) for daily
-  // autocorrelated flicker noise, floored at 0.3 mm/yr horizontal, 0.8 mm/yr
-  // up.
+  // MIDAS scales the slope scatter by sqrt(N / 4); daily positions are
+  // strongly autocorrelated, so we use the more conservative sqrt(N / 90),
+  // floored at 0.4 mm/yr horizontal and 1.0 mm/yr up.
   const double n_eff =
       std::max(1.0, static_cast<double>(trimmed.size()) / 90.0);
   const double floor_sig = (comp < 2) ? 0.0004 : 0.0010;
@@ -132,8 +137,8 @@ analyze_station(const io::GnssStationSeries &series,
   out.dist_epicenter_km = geo::haversine_km(epicenter_lat, epicenter_lon,
                                             series.lat_deg, series.lon_deg);
 
-  // Collect relevant step MJDs (equipment steps + M>=6.2 earthquake steps not
-  // on `event_mjd`).
+  // Collect relevant step MJDs (equipment steps + M>=6.2 earthquake steps
+  // within half their NGL threshold distance, not on `event_mjd`).
   std::vector<double> step_mjds;
   for (const auto &st : steps) {
     if (std::abs(st.mjd - event_mjd) <= 2.0)
@@ -153,8 +158,8 @@ analyze_station(const io::GnssStationSeries &series,
       ++out.n_pre_days;
   }
 
-  // 1. Interseismic velocity via MIDAS on pre-event history (or full history
-  // excluding across event_mjd if pre-event history < 400 days).
+  // 1. Interseismic velocity via MIDAS on pre-event history (or full history,
+  // excluding pairs across event_mjd, if pre-event history < 420 days).
   std::vector<double> midas_steps = step_mjds;
   midas_steps.push_back(event_mjd);
   std::ranges::sort(midas_steps);
@@ -174,8 +179,8 @@ analyze_station(const io::GnssStationSeries &series,
   }
 
   // 2. Coseismic offset at `event_mjd`:
-  // Require at least 5 daily solutions in `[event_mjd - 30, event_mjd - 1]` and
-  // at least 5 in `[event_mjd + 1, event_mjd + 30]`.
+  // Require at least 4 daily solutions in `[event_mjd - 30, event_mjd - 1]` and
+  // at least 4 in `[event_mjd + 1, event_mjd + 30]`.
   std::vector<const io::Tenv3Sample *> pre_near, post_near, fit_win;
   for (const auto &s : series.samples) {
     if (s.mjd >= event_mjd - 30.0 && s.mjd <= event_mjd - 1.0)
@@ -229,7 +234,7 @@ analyze_station(const io::GnssStationSeries &series,
                              : 0.0;
 
     // A) Robust detrended pre/post median difference over [-21d, -1d] vs [+1d,
-    // +15d]
+    // +16d]
     std::vector<double> pre_v, post_v;
     for (const auto *s : pre_near) {
       if (s->mjd >= event_mjd - 21.0) {
@@ -260,11 +265,11 @@ analyze_station(const io::GnssStationSeries &series,
     const double sig_pre = linalg::mad_sigma(pre_v, med_pre);
     const double sig_post = linalg::mad_sigma(post_v, med_post);
     const double delta_med = med_post - med_pre;
-    const double floor_mm = (comp < 2) ? 0.0012 : 0.0035;
+    const double floor_m = (comp < 2) ? 0.0012 : 0.0035;
     const double sigma_med = std::hypot(
         std::hypot(sig_pre / std::sqrt(static_cast<double>(pre_v.size())),
                    sig_post / std::sqrt(static_cast<double>(post_v.size()))),
-        floor_mm);
+        floor_m);
 
     // B) Weighted Least-Squares trajectory model over `fit_win`
     // Columns: 0: intercept, 1: velocity, 2: coseismic H(t - t_eq),

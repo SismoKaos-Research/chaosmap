@@ -42,10 +42,11 @@ struct RegionConfig {
 
 struct PathsConfig {
   std::filesystem::path gnss_dir{"data/gnss"};
-  std::filesystem::path catalog_csv{
-      "/home/oguzb/Projects/sismokaos/chaos/catalog_current.csv"};
-  std::filesystem::path station_coords_csv{
-      "/home/oguzb/Projects/sismokaos/chaos/station_coords.csv"};
+  std::filesystem::path catalog_csv;
+  std::filesystem::path station_coords_csv;
+  // Optional AFAD station catalogue (Longitude,Latitude column order) merged
+  // into the seismic station coordinates.
+  std::filesystem::path afad_station_catalog_csv;
   std::filesystem::path broadband_dir;
   std::vector<std::string> broadband_stations;
   std::filesystem::path out_dir{"out"};
@@ -93,6 +94,8 @@ struct CaseConfig {
       cfg.paths.catalog_csv = *v;
     if (auto v = p["station_coords_csv"].value<std::string>())
       cfg.paths.station_coords_csv = *v;
+    if (auto v = p["afad_station_catalog_csv"].value<std::string>())
+      cfg.paths.afad_station_catalog_csv = *v;
     if (auto v = p["broadband_dir"].value<std::string>())
       cfg.paths.broadband_dir = *v;
     if (auto v = p["out_dir"].value<std::string>())
@@ -109,10 +112,13 @@ struct CaseConfig {
     const auto repo_root = (cfg_abs.parent_path().filename() == "configs")
                                ? cfg_abs.parent_path().parent_path()
                                : cfg_abs.parent_path();
-    if (cfg.paths.gnss_dir.is_relative())
-      cfg.paths.gnss_dir = repo_root / cfg.paths.gnss_dir;
-    if (cfg.paths.out_dir.is_relative())
-      cfg.paths.out_dir = repo_root / cfg.paths.out_dir;
+    for (auto *pth :
+         {&cfg.paths.gnss_dir, &cfg.paths.catalog_csv,
+          &cfg.paths.station_coords_csv, &cfg.paths.afad_station_catalog_csv,
+          &cfg.paths.broadband_dir, &cfg.paths.out_dir}) {
+      if (!pth->empty() && pth->is_relative())
+        *pth = repo_root / *pth;
+    }
     return cfg;
   }
 };

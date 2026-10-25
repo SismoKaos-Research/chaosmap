@@ -31,6 +31,8 @@
 namespace chaosmap::anomaly {
 
 struct DailyStationLyapunov {
+  // MJD on which this 24 h bin starts; bins are aligned to the mainshock origin
+  // time, so day_mjd < floor(origin MJD) means entirely before the mainshock.
   int day_mjd{};
   double wolf_fault{};
   double wolf_ctrl{};
@@ -90,13 +92,15 @@ struct ArrayAnomalyResult {
 
 namespace detail {
 
-// Lee (1972) coda duration in days for an earthquake of magnitude M:
-// D_sec = 10^((M - 0.87) / 2.0), plus a conservative 120s buffer.
+// Signal duration in days for an earthquake of magnitude M, from the Lee et
+// al. (1972) duration magnitude M = -0.87 + 2.00 log10(tau) + 0.0035 D solved
+// for tau with the distance term dropped (D = 0 gives the longest duration):
+// tau = 10^((M + 0.87) / 2) s, plus a conservative 120 s buffer, capped at 2 h.
 [[nodiscard]] inline double coda_duration_days(double mag) noexcept {
   if (mag < 2.2)
     return 0.0;
   const double sec =
-      std::clamp(std::pow(10.0, 0.5 * (mag - 0.87)) + 120.0, 120.0, 7200.0);
+      std::clamp(std::pow(10.0, 0.5 * (mag + 0.87)) + 120.0, 120.0, 7200.0);
   return sec / 86400.0;
 }
 
@@ -185,7 +189,8 @@ analyze_broadband_array(const core::CaseConfig &cfg,
   if (!std::filesystem::exists(cfg.paths.broadband_dir, ec))
     return out;
 
-  const auto coords = io::read_station_coords_csv(cfg.paths.station_coords_csv);
+  const auto coords = io::read_station_coords_csv(
+      cfg.paths.station_coords_csv, cfg.paths.afad_station_catalog_csv);
 
   std::vector<std::filesystem::path> sta_dirs;
   for (const auto &entry :
@@ -205,9 +210,16 @@ analyze_broadband_array(const core::CaseConfig &cfg,
   constexpr int kDim = 5;
   constexpr int kEvolve = 5;
 
-  // Analyze [event_mjd - 8, event_mjd + 7] across all stations in parallel
-  const double min_mjd = cfg.event.mjd - 8.0;
-  const double max_mjd = cfg.event.mjd + 7.0;
+  // Mainshock origin time as a fractional MJD (`event.mjd` is only the day)
+  const double origin_mjd =
+      (cfg.event.origin_epoch_s != 0)
+          ? 40587.0 + static_cast<double>(cfg.event.origin_epoch_s) / 86400.0
+          : cfg.event.mjd;
+  const int ev_day = static_cast<int>(std::floor(origin_mjd));
+
+  // Analyze [origin - 8 d, origin + 7 d] across all stations in parallel
+  const double min_mjd = origin_mjd - 8.0;
+  const double max_mjd = origin_mjd + 7.0;
   const double win_days = kWinSec / 86400.0;
 
   std::vector<SeismicStationSummary> summaries(sta_dirs.size());
@@ -252,7 +264,8 @@ analyze_broadband_array(const core::CaseConfig &cfg,
           continue;
         const auto win_n =
             static_cast<std::size_t>(std::llround(kWinSec * tr.sample_rate_hz));
-        // Sample one 10-minute background window every 3 hours (18 windows)
+        // Sample one 10-minute background window every 3 hours (stride of 18
+        // windows, i.e. 8 windows per day)
         const std::size_t stride_n = win_n * 18;
         if (tr.data.size() < win_n)
           continue;
@@ -264,8 +277,9 @@ analyze_broadband_array(const core::CaseConfig &cfg,
               (static_cast<double>(off) / tr.sample_rate_hz) / 86400.0;
           if (w_mjd < min_mjd || w_mjd > max_mjd)
             continue;
-          // Exclude mainshock day itself [event_mjd - 0.05, event_mjd + 0.35]
-          if (w_mjd >= cfg.event.mjd - 0.05 && w_mjd <= cfg.event.mjd + 0.35)
+          // Exclude windows overlapping [origin - 1.2 h, origin + 8.4 h]
+          if (w_mjd + win_days >= origin_mjd - 0.05 &&
+              w_mjd <= origin_mjd + 0.35)
             continue;
           if (detail::window_overlaps_catalog(w_mjd, w_mjd + win_days, events))
             continue;
@@ -284,7 +298,9 @@ analyze_broadband_array(const core::CaseConfig &cfg,
               chaos::wolf_lye_core(x_ctrl_norm, kTargetFs, kTau, kDim, kEvolve);
 
           if (std::isfinite(wf_fault.wolf_lye)) {
-            const int day = static_cast<int>(std::floor(w_mjd));
+            // 24 h bins aligned to the origin time (see DailyStationLyapunov)
+            const int day =
+                ev_day + static_cast<int>(std::floor(w_mjd - origin_mjd));
             auto &acc = by_day[day];
             acc.wolf_f.push_back(wf_fault.wolf_lye);
             if (std::isfinite(wolf_ctrl))
@@ -322,7 +338,7 @@ analyze_broadband_array(const core::CaseConfig &cfg,
         d.corr_dim_fault = acc.cd_f.empty() ? 0.0 : linalg::median(acc.cd_f);
         sum.daily.push_back(d);
 
-        if (day < static_cast<int>(std::floor(cfg.event.mjd))) {
+        if (day < ev_day) {
           all_wolf_pre.push_back(d.wolf_fault);
           all_cb_pre.push_back(d.wolf_fault - d.wolf_ctrl);
           pre_ros.push_back(d.ros_short_fault);
@@ -343,7 +359,6 @@ analyze_broadband_array(const core::CaseConfig &cfg,
 
       std::vector<double> pre_scores;
       std::vector<std::uint8_t> pre_labels;
-      const int ev_day = static_cast<int>(std::floor(cfg.event.mjd));
 
       for (std::size_t i = 0; i < sum.daily.size(); ++i) {
         sum.daily[i].z_iqr_wolf = z_w[i];
@@ -403,7 +418,6 @@ analyze_broadband_array(const core::CaseConfig &cfg,
   }
   out.mean_abs_delta_wolf /= static_cast<double>(out.stations.size());
 
-  const int ev_day = static_cast<int>(std::floor(cfg.event.mjd));
   std::vector<double> arr_pre_scores;
   std::vector<std::uint8_t> arr_pre_labels;
 

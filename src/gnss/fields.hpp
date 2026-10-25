@@ -17,11 +17,11 @@ namespace chaosmap::gnss {
 
 struct GeodeticGridFields {
   std::vector<linalg::Vec2> vel_enu_m_yr;      // interpolated (vE, vN) per cell
-  std::vector<double> max_shear_nanostrain_yr; // 2nd invariant / max shear
+  std::vector<double> max_shear_nanostrain_yr; // engineering max shear e1-e2
   std::vector<double> dilatation_nanostrain_yr;
-  std::vector<double> rotation_nanorad_yr;
-  std::vector<double> ftle_interseismic; // L-geo before (normalized [0, 1])
-  std::vector<double> ftle_coseismic;    // L-geo coseismic gradient
+  std::vector<double> rotation_nanorad_yr; // positive clockwise
+  std::vector<double> ftle_interseismic;   // L-geo before (normalized [0, 1])
+  std::vector<double> ftle_coseismic; // L-geo coseismic finite strain [0, 1]
   // Extracted principal ridge polyline of the interseismic FTLE field:
   double ridge_start_lat{};
   double ridge_start_lon{};
@@ -41,23 +41,35 @@ struct ProjectedVelStation {
   double sn_m_yr{};
   double co_e_m{};
   double co_n_m{};
+  double co_se_m{};
+  double co_sn_m{};
   bool has_vel{false};
   bool has_co{false};
 };
 
-// Evaluates local affine velocity model v(x) = v0 + J * (x - x0) around
-// `(x0_km, y0_km)` using Gaussian distance weighting (Shen et al. 1996).
-// Returns {vE, vN} in m/yr and velocity gradient J = [dvE/dx, dvE/dy; dvN/dx,
-// dvN/dy] in units of (m/yr)/km = 1e-3 / yr = 1000 nanostrain/yr.
+// Station field fitted by `local_velocity_gradient`.
+enum class StationField { kVelocity, kCoseismic };
+
+// Evaluates the local affine model v(x) = v0 + J * (x - x0) of a station field
+// around `(x0_km, y0_km)` using Gaussian distance weighting (Shen et al. 1996).
+// Returns {vE, vN} and the gradient J = [dvE/dx, dvE/dy; dvN/dx, dvN/dy] with
+// x, y in km. For `kVelocity` the values are in m/yr and J is in (m/yr)/km =
+// 1e-3 /yr = 1e6 nanostrain/yr; for `kCoseismic` the values are in m and J is
+// in m/km = 1e-3 (dimensionless strain).
 [[nodiscard]] inline std::pair<linalg::Vec2, std::array<double, 4>>
 local_velocity_gradient(double x0_km, double y0_km,
                         std::span<const ProjectedVelStation> sta,
-                        double length_scale_km = 65.0) {
-  // Adaptive length scale: ensure 5th-nearest station is within 1.5 * L
+                        double length_scale_km = 65.0,
+                        StationField field = StationField::kVelocity) {
+  const bool coseismic = (field == StationField::kCoseismic);
+  auto used = [coseismic](const ProjectedVelStation &s) {
+    return coseismic ? s.has_co : s.has_vel;
+  };
+  // Adaptive length scale: L >= 0.75 * distance to the 6th-nearest station
   std::vector<double> d2s;
   d2s.reserve(sta.size());
   for (const auto &s : sta) {
-    if (!s.has_vel)
+    if (!used(s))
       continue;
     const double dx = s.x_km - x0_km;
     const double dy = s.y_km - y0_km;
@@ -76,18 +88,20 @@ local_velocity_gradient(double x0_km, double y0_km,
   std::vector<double> be(d2s.size(), 0.0), bn(d2s.size(), 0.0);
   std::size_t row = 0;
   for (const auto &s : sta) {
-    if (!s.has_vel)
+    if (!used(s))
       continue;
     const double dx = s.x_km - x0_km;
     const double dy = s.y_km - y0_km;
     const double d2 = dx * dx + dy * dy;
-    const double w = std::exp(-d2 * inv_2L2) /
-                     std::max(0.0005, 0.5 * (s.se_m_yr + s.sn_m_yr));
+    const double sigma = coseismic
+                             ? std::max(0.002, 0.5 * (s.co_se_m + s.co_sn_m))
+                             : std::max(0.0005, 0.5 * (s.se_m_yr + s.sn_m_yr));
+    const double w = std::exp(-d2 * inv_2L2) / sigma;
     X(row, 0) = w;
     X(row, 1) = w * dx;
     X(row, 2) = w * dy;
-    be[row] = w * s.ve_m_yr;
-    bn[row] = w * s.vn_m_yr;
+    be[row] = w * (coseismic ? s.co_e_m : s.ve_m_yr);
+    bn[row] = w * (coseismic ? s.co_n_m : s.vn_m_yr);
     ++row;
   }
   const auto ce = linalg::solve_lstsq(X, be);
@@ -155,6 +169,8 @@ compute_strain_and_ftle(std::span<const StationMotion> stations,
         .sn_m_yr = s.vel_sigma_m_yr.y,
         .co_e_m = s.coseismic_enu_m.x,
         .co_n_m = s.coseismic_enu_m.y,
+        .co_se_m = s.coseismic_sigma_m.x,
+        .co_sn_m = s.coseismic_sigma_m.y,
         .has_vel = s.has_velocity,
         .has_co = s.has_coseismic,
     });
@@ -168,13 +184,16 @@ compute_strain_and_ftle(std::span<const StationMotion> stations,
       const auto [v, J] = detail::local_velocity_gradient(pt.x, pt.y, psta);
       out.vel_enu_m_yr[idx] = v;
 
-      // J entries are in (m/yr)/km = 1e-6 / yr; multiply by 1000 for
+      // J entries are in (m/yr)/km = 1e-3 /yr; multiply by 1e6 for
       // nanostrain/yr
-      const double exx = 1000.0 * J[0];
-      const double exy = 500.0 * (J[1] + J[2]);
-      const double eyy = 1000.0 * J[3];
-      const double rot = 500.0 * (J[1] - J[2]);
+      constexpr double kNanostrainPerJ = 1.0e6;
+      const double exx = kNanostrainPerJ * J[0];
+      const double exy = 0.5 * kNanostrainPerJ * (J[1] + J[2]);
+      const double eyy = kNanostrainPerJ * J[3];
+      // Rotation rate about the vertical axis, positive clockwise
+      const double rot = 0.5 * kNanostrainPerJ * (J[1] - J[2]);
 
+      // Maximum engineering shear strain rate (e1 - e2)
       out.max_shear_nanostrain_yr[idx] = std::hypot(exx - eyy, 2.0 * exy);
       out.dilatation_nanostrain_yr[idx] = exx + eyy;
       out.rotation_nanorad_yr[idx] = rot;
@@ -182,9 +201,10 @@ compute_strain_and_ftle(std::span<const StationMotion> stations,
   }
 
   // 2. Finite-Time Lyapunov Exponent (FTLE) via RK4 particle advection on the
-  //    scaled velocity field (advection horizon T_scale_km_per_m_yr = 800
-  //    yr*km/m so a 20 mm/yr plate rate displaces tracers by ~16 km across
-  //    shear zones).
+  //    velocity field. Positions are in km and velocities in m/yr, so the
+  //    advection horizon of 800 km*yr/m is T = 800 kyr: a 20 mm/yr rate
+  //    displaces tracers by 16 km. The FTLE is normalized to [0, 1] below, so
+  //    the 1/T factor is omitted.
   constexpr double kAdvectScale = 800.0;
   constexpr int kRkSteps = 8;
   const double dt = kAdvectScale / static_cast<double>(kRkSteps);
@@ -221,23 +241,26 @@ compute_strain_and_ftle(std::span<const StationMotion> stations,
   for (std::size_t r = 1; r + 1 < grid.n_lat; ++r) {
     for (std::size_t c = 1; c + 1 < grid.n_lon; ++c) {
       const std::size_t idx = r * grid.n_lon + c;
-      const auto p_xp = grid.enu_at(r, c + 1);
-      const auto p_xm = grid.enu_at(r, c - 1);
-      const auto p_yp = grid.enu_at(r + 1, c);
-      const auto p_ym = grid.enu_at(r - 1, c);
-      const double dx = std::max(1e-3, p_xp.x - p_xm.x);
-      const double dy = std::max(1e-3, p_yp.y - p_ym.y);
+      // Initial separations of the column and row neighbours. The grid is
+      // regular in (lat, lon), so in metric coordinates these are not exactly
+      // axis-aligned; the flow-map gradient is taken relative to them.
+      const auto a = grid.enu_at(r, c + 1) - grid.enu_at(r, c - 1);
+      const auto b = grid.enu_at(r + 1, c) - grid.enu_at(r - 1, c);
+      const double det = a.x * b.y - b.x * a.y;
+      if (std::abs(det) < 1e-9)
+        continue;
 
       auto calc_sigma = [&](const std::vector<linalg::Vec2> &flow) {
-        const auto &fxp = flow[r * grid.n_lon + (c + 1)];
-        const auto &fxm = flow[r * grid.n_lon + (c - 1)];
-        const auto &fyp = flow[(r + 1) * grid.n_lon + c];
-        const auto &fym = flow[(r - 1) * grid.n_lon + c];
+        const auto fa =
+            flow[r * grid.n_lon + (c + 1)] - flow[r * grid.n_lon + (c - 1)];
+        const auto fb =
+            flow[(r + 1) * grid.n_lon + c] - flow[(r - 1) * grid.n_lon + c];
 
-        const double F00 = (fxp.x - fxm.x) / dx;
-        const double F01 = (fyp.x - fym.x) / dy;
-        const double F10 = (fxp.y - fxm.y) / dx;
-        const double F11 = (fyp.y - fym.y) / dy;
+        // F = [fa fb] * [a b]^-1
+        const double F00 = (fa.x * b.y - fb.x * a.y) / det;
+        const double F01 = (fb.x * a.x - fa.x * b.x) / det;
+        const double F10 = (fa.y * b.y - fb.y * a.y) / det;
+        const double F11 = (fb.y * a.x - fa.y * b.x) / det;
 
         // Cauchy-Green tensor C = F^T F
         const double C00 = F00 * F00 + F10 * F10;
@@ -257,20 +280,23 @@ compute_strain_and_ftle(std::span<const StationMotion> stations,
     }
   }
 
-  // Fill border cells from nearest interior cell and normalize FTLE to [0, 1]
+  // Fill border cells from nearest interior cell and normalize FTLE to [0, 1].
+  // Read from a copy: normalizing in place would normalize the interior cells
+  // copied into the east and north borders twice.
+  const std::vector<double> raw_ftle = out.ftle_interseismic;
   const double span = std::max(1e-9, max_ftle - min_ftle);
   for (std::size_t r = 0; r < grid.n_lat; ++r) {
     for (std::size_t c = 0; c < grid.n_lon; ++c) {
       const std::size_t rr = std::clamp<std::size_t>(r, 1, grid.n_lat - 2);
       const std::size_t cc = std::clamp<std::size_t>(c, 1, grid.n_lon - 2);
-      const double raw = out.ftle_interseismic[rr * grid.n_lon + cc];
+      const double raw = raw_ftle[rr * grid.n_lon + cc];
       out.ftle_interseismic[r * grid.n_lon + c] =
           std::clamp((raw - min_ftle) / span, 0.0, 1.0);
     }
   }
 
-  // Extract the principal ridge axis of the top-20% FTLE cells via weighted 2D
-  // PCA
+  // Extract the principal ridge axis of the cells with normalized FTLE >= 0.65
+  // via weighted 2D PCA
   double w_sum = 0.0, mx = 0.0, my = 0.0;
   for (std::size_t r = 0; r < grid.n_lat; ++r) {
     for (std::size_t c = 0; c < grid.n_lon; ++c) {
@@ -316,6 +342,37 @@ compute_strain_and_ftle(std::span<const StationMotion> stations,
     out.ridge_end_lat = p1.x;
     out.ridge_end_lon = p1.y;
   }
+
+  // 3. Coseismic FTLE: the coseismic displacement is itself a finite-time flow
+  //    map x -> x + u(x), with gradient F = I + grad(u). Its largest finite
+  //    stretching 0.5 * ln(lambda_max(F^T F)) is normalized to [0, 1].
+  double min_co = 1e30, max_co = -1e30;
+  for (std::size_t r = 0; r < grid.n_lat; ++r) {
+    for (std::size_t c = 0; c < grid.n_lon; ++c) {
+      const std::size_t idx = r * grid.n_lon + c;
+      const auto pt = grid.enu_at(r, c);
+      const auto Ju =
+          detail::local_velocity_gradient(pt.x, pt.y, psta, 65.0,
+                                          detail::StationField::kCoseismic)
+              .second;
+      // Ju is in m/km; 1e-3 converts it to dimensionless strain
+      const double F00 = 1.0 + 1e-3 * Ju[0];
+      const double F01 = 1e-3 * Ju[1];
+      const double F10 = 1e-3 * Ju[2];
+      const double F11 = 1.0 + 1e-3 * Ju[3];
+      const double C00 = F00 * F00 + F10 * F10;
+      const double C01 = F00 * F01 + F10 * F11;
+      const double C11 = F01 * F01 + F11 * F11;
+      const auto eig = linalg::sym_eig2(C00, C01, C11);
+      const double val = 0.5 * std::log(std::max(1.0, eig.values[1]));
+      out.ftle_coseismic[idx] = val;
+      min_co = std::min(min_co, val);
+      max_co = std::max(max_co, val);
+    }
+  }
+  const double span_co = max_co - min_co;
+  for (double &v : out.ftle_coseismic)
+    v = (span_co > 1e-12) ? std::clamp((v - min_co) / span_co, 0.0, 1.0) : 0.0;
 
   return out;
 }

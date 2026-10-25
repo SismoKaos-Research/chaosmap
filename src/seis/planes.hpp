@@ -1,8 +1,8 @@
 #pragma once
 
-// 3D hypocentre plane fitting (PCA / OADC-style anisotropic clustering) for
-// extracting pre-event background fault planes and post-event aftershock
-// rupture planes.
+// Hypocentre plane fitting (horizontal weighted PCA for strike and length plus
+// a strike-normal cross-section regression for dip) for extracting pre-event
+// background fault planes and post-event aftershock rupture planes.
 
 #include "core/linalg.hpp"
 #include "geo/projection.hpp"
@@ -25,7 +25,7 @@ struct FittedPlane {
   double length_km{};
   double width_km{};
   double thickness_km{}; // 1-sigma fault-normal thickness
-  double planarity{};    // 1 - lambda_0 / lambda_1 in [0, 1]
+  double planarity{};    // horizontal elongation 1 - lambda_0 / lambda_1
   double trace_start_lat{};
   double trace_start_lon{};
   double trace_end_lat{};
@@ -35,13 +35,16 @@ struct FittedPlane {
 
 struct SeismicityAnalysis {
   FittedPlane dominant_plane;
-  std::vector<FittedPlane> segments; // along-strike OADC sub-planes
+  std::vector<FittedPlane> segments; // equal-count along-strike sub-planes
   std::vector<double> grid_density;  // normalized [0, 1] on Grid2D
-  std::vector<double> grid_planarity;
 };
 
-// Fits a 3D fault plane to a cloud of earthquake hypocentres using weighted
-// 3D PCA (weighted by M^2 so larger shocks anchor the plane).
+// Fits a fault plane to a cloud of earthquake hypocentres in two stages
+// (weighted by M^2 so larger shocks anchor the plane): a horizontal 2D PCA
+// gives strike and length, and an orthogonal regression in the strike-normal
+// cross-section gives dip and width. Dimensions and dip are reported as
+// fitted (not clamped), so a cloud without a resolvable dip shows a dip near
+// 0 rather than a plausible-looking bound.
 [[nodiscard]] inline FittedPlane
 fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
                      const geo::LocalProjection &proj) {
@@ -126,14 +129,11 @@ fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
   const auto eig_uv = linalg::sym_eig2(cuu, cuv, cvv);
   const double du = std::abs(eig_uv.vectors[1].x);
   const double dv = std::abs(eig_uv.vectors[1].y);
-  out.dip_deg =
-      std::clamp(geo::rad2deg(std::atan2(dv, std::max(1e-6, du))), 20.0, 89.0);
+  out.dip_deg = geo::rad2deg(std::atan2(dv, std::max(1e-6, du)));
 
   out.thickness_km = std::sqrt(std::max(0.0, eig_uv.values[0]));
-  out.width_km =
-      std::clamp(3.2 * std::sqrt(std::max(0.0, eig_uv.values[1])), 8.0, 35.0);
-  out.length_km =
-      std::clamp(3.2 * std::sqrt(std::max(0.0, eig_xy.values[1])), 10.0, 250.0);
+  out.width_km = 3.2 * std::sqrt(std::max(0.0, eig_uv.values[1]));
+  out.length_km = 3.2 * std::sqrt(std::max(0.0, eig_xy.values[1]));
   out.planarity =
       (eig_xy.values[1] > 1e-6)
           ? std::clamp(1.0 - eig_xy.values[0] / eig_xy.values[1], 0.0, 1.0)
@@ -166,12 +166,11 @@ analyze_seismicity(std::span<const io::CatalogEvent> events,
   SeismicityAnalysis out;
   out.dominant_plane = fit_hypocentre_plane(events, grid.proj);
   out.grid_density.assign(grid.size(), 0.0);
-  out.grid_planarity.assign(grid.size(), 0.0);
   if (events.empty())
     return out;
 
-  // Partition events along the dominant strike axis into `n_segments` OADC
-  // sub-segments to capture fault bends/splays.
+  // Partition events along the dominant strike axis into `n_segments`
+  // equal-count sub-segments to capture fault bends/splays.
   const double str_rad = geo::deg2rad(out.dominant_plane.strike_deg);
   const double sin_s = std::sin(str_rad);
   const double cos_s = std::cos(str_rad);

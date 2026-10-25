@@ -206,6 +206,8 @@ load_station_waveforms(const std::filesystem::path &station_dir, double min_mjd,
       if (!in)
         continue;
       std::size_t carry = 0;
+      locked_channel.clear();
+      reached_max_mjd = false;
       while (in) {
         in.read(reinterpret_cast<char *>(chunk.data() + carry),
                 static_cast<std::streamsize>(kChunkBytes - carry));
