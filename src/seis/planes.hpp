@@ -9,8 +9,13 @@
 #include "io/catalog.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
+#include <limits>
+#include <map>
 #include <numbers>
+#include <set>
 #include <span>
 #include <vector>
 
@@ -20,17 +25,19 @@ struct FittedPlane {
   double center_lat{};
   double center_lon{};
   double center_depth_km{};
-  double strike_deg{}; // 0..360, dipping to the right of strike
-  double dip_deg{};    // 0..90
+  double strike_deg{}; // 0..360, dipping to the right of strike if resolved
+  double dip_deg{};    // 0..90, NaN if the catalog depths cannot resolve it
   double length_km{};
-  double width_km{};
-  double thickness_km{}; // 1-sigma fault-normal thickness
+  double width_km{};     // NaN if the dip is unresolved
+  double thickness_km{}; // 1-sigma fault-normal thickness, NaN if unresolved
   double planarity{};    // horizontal elongation 1 - lambda_0 / lambda_1
   double trace_start_lat{};
   double trace_start_lon{};
   double trace_end_lat{};
   double trace_end_lon{};
   std::size_t n_events{0};
+  // Events whose depth is not held at a fixed value (used for the dip)
+  std::size_t n_free_depth{0};
 };
 
 struct SeismicityAnalysis {
@@ -39,19 +46,75 @@ struct SeismicityAnalysis {
   std::vector<double> grid_density;  // normalized [0, 1] on Grid2D
 };
 
+namespace detail {
+
+// Flags hypocentres whose depth sits in a spike of the depth histogram.
+// Catalog locators hold poorly constrained events at, or barely move them
+// from, a fixed trial depth (e.g. 5 or 7 km); those depths carry no
+// information on dip and stack into a flat layer that pulls a fitted plane
+// towards horizontal. A 0.1 km bin is a spike when it holds at least 2% of
+// the events and at least 4x the median count of the bins 0.3-1.0 km away on
+// either side; real depth scatter spreads over many bins and never qualifies.
+[[nodiscard]] inline std::vector<std::uint8_t>
+fixed_depth_mask(std::span<const io::CatalogEvent> events) {
+  std::vector<std::uint8_t> fixed(events.size(), 0);
+  if (events.size() < 50)
+    return fixed;
+  auto bin_of = [](double depth_km) { return std::lround(depth_km * 10.0); };
+  std::map<long, std::size_t> counts;
+  for (const auto &e : events)
+    ++counts[bin_of(e.depth_km)];
+
+  const double n = static_cast<double>(events.size());
+  std::set<long> spikes;
+  for (const auto &[b, c] : counts) {
+    if (static_cast<double>(c) < 0.02 * n)
+      continue;
+    std::vector<double> nb;
+    for (long k = 3; k <= 10; ++k) {
+      for (long off : {-k, k}) {
+        const auto it = counts.find(b + off);
+        nb.push_back(it == counts.end() ? 0.0
+                                        : static_cast<double>(it->second));
+      }
+    }
+    if (static_cast<double>(c) >= 4.0 * std::max(1.0, linalg::median(nb)))
+      spikes.insert(b);
+  }
+  for (std::size_t i = 0; i < events.size(); ++i)
+    fixed[i] = spikes.contains(bin_of(events[i].depth_km)) ? 1 : 0;
+  return fixed;
+}
+
+} // namespace detail
+
+// Minimum number of free-depth events in the cross-section to fit a dip.
+inline constexpr std::size_t kMinDipEvents = 20;
+// The cross-section cloud must be elongated: minor/major variance <= this.
+inline constexpr double kMaxDipAnisotropy = 0.25;
+// A near-horizontal major axis is what a depth-limited seismogenic layer
+// produces whatever the fault dip, so shallower fits are unresolved.
+inline constexpr double kMinResolvedDipDeg = 10.0;
+
 // Fits a fault plane to a cloud of earthquake hypocentres in two stages
 // (weighted by M^2 so larger shocks anchor the plane): a horizontal 2D PCA
 // gives strike and length, and an orthogonal regression in the strike-normal
-// cross-section gives dip and width. Dimensions and dip are reported as
-// fitted (not clamped), so a cloud without a resolvable dip shows a dip near
-// 0 rather than a plausible-looking bound.
+// cross-section gives dip and width. The dip uses only events whose depths
+// are not held at a fixed value (`detail::fixed_depth_mask`). If those cannot
+// define a dipping plane, dip, width and thickness are NaN and the strike is
+// left as the horizontal axis (its dip direction is unknown).
 [[nodiscard]] inline FittedPlane
 fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
                      const geo::LocalProjection &proj) {
+  constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
   FittedPlane out;
   out.n_events = events.size();
-  if (events.size() < 4)
+  if (events.size() < 4) {
+    out.dip_deg = kNaN;
+    out.width_km = kNaN;
+    out.thickness_km = kNaN;
     return out;
+  }
 
   std::vector<linalg::Vec3> pts(events.size());
   std::vector<double> w(events.size(), 1.0);
@@ -96,43 +159,59 @@ fit_hypocentre_plane(std::span<const io::CatalogEvent> events,
   const double sigma_perp =
       std::clamp(std::sqrt(std::max(1.0, eig_xy.values[0])), 4.0, 12.0);
 
-  double cuu = 0.0, cuv = 0.0, cvv = 0.0, w_cs = 0.0;
+  const auto fixed = detail::fixed_depth_mask(events);
+  std::vector<std::array<double, 3>> cs; // (u, v, weight) in the corridor
+  double mu = 0.0, mv = 0.0, w_cs = 0.0;
   for (std::size_t i = 0; i < events.size(); ++i) {
+    if (fixed[i])
+      continue;
+    ++out.n_free_depth;
     const double dx = pts[i].x - mean.x;
     const double dy = pts[i].y - mean.y;
-    const double u =
-        dx * perp_x + dy * perp_y;            // across-strike (+ to right, km)
-    const double v = (-pts[i].z) - (-mean.z); // depth (+ downward, km)
+    const double u = dx * perp_x + dy * perp_y; // across-strike (+ right, km)
+    const double v = -pts[i].z;                 // depth (+ downward, km)
     if (std::abs(u) > 1.25 * sigma_perp)
       continue;
-    const double wi = w[i];
-    cuu += wi * u * u;
-    cuv += wi * u * v;
-    cvv += wi * v * v;
-    w_cs += wi;
+    cs.push_back({u, v, w[i]});
+    mu += w[i] * u;
+    mv += w[i] * v;
+    w_cs += w[i];
   }
+  // Orthogonal regression about the centroid of the cross-section subset
+  double cuu = 0.0, cuv = 0.0, cvv = 0.0;
   if (w_cs > 0.0) {
+    mu /= w_cs;
+    mv /= w_cs;
+    for (const auto &[u, v, wi] : cs) {
+      cuu += wi * (u - mu) * (u - mu);
+      cuv += wi * (u - mu) * (v - mv);
+      cvv += wi * (v - mv) * (v - mv);
+    }
     cuu /= w_cs;
     cuv /= w_cs;
     cvv /= w_cs;
   }
 
-  // If cuv < 0, depth increases to the left of strike_deg, so flip strike by
-  // 180 deg to obey the right-hand rule (dip to the right of strike).
-  if (cuv < 0.0) {
-    strike_deg = std::fmod(strike_deg + 180.0, 360.0);
-    cuv = -cuv;
-  }
-  out.strike_deg = strike_deg;
-
-  // Physical (km, km) 2D orthogonal regression in the core cross-section:
   const auto eig_uv = linalg::sym_eig2(cuu, cuv, cvv);
   const double du = std::abs(eig_uv.vectors[1].x);
   const double dv = std::abs(eig_uv.vectors[1].y);
-  out.dip_deg = geo::rad2deg(std::atan2(dv, std::max(1e-6, du)));
+  const double dip = geo::rad2deg(std::atan2(dv, std::max(1e-6, du)));
+  const bool resolved =
+      cs.size() >= kMinDipEvents && eig_uv.values[1] > 0.0 &&
+      eig_uv.values[0] <= kMaxDipAnisotropy * eig_uv.values[1] &&
+      dip >= kMinResolvedDipDeg;
 
-  out.thickness_km = std::sqrt(std::max(0.0, eig_uv.values[0]));
-  out.width_km = 3.2 * std::sqrt(std::max(0.0, eig_uv.values[1]));
+  // If cuv < 0, depth increases to the left of strike_deg, so flip strike by
+  // 180 deg to obey the right-hand rule (dip to the right of strike).
+  if (resolved && cuv < 0.0)
+    strike_deg = std::fmod(strike_deg + 180.0, 360.0);
+  out.strike_deg = strike_deg;
+
+  out.dip_deg = resolved ? dip : kNaN;
+  out.thickness_km =
+      resolved ? std::sqrt(std::max(0.0, eig_uv.values[0])) : kNaN;
+  out.width_km =
+      resolved ? 3.2 * std::sqrt(std::max(0.0, eig_uv.values[1])) : kNaN;
   out.length_km = 3.2 * std::sqrt(std::max(0.0, eig_xy.values[1]));
   out.planarity =
       (eig_xy.values[1] > 1e-6)

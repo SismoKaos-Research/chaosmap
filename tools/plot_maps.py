@@ -397,9 +397,11 @@ def render_case(out_dir: pathlib.Path) -> None:
 
             ctx.set_font_size(12)
             ctx.set_source_rgb(0.96, 0.98, 1.0)
+            post_dip = cmp_m.get("post_aftershock_dip_deg")
+            dip_txt = "unresolved" if post_dip is None else f"{post_dip:.1f}°"
             lines = [
                 f"Before Strike: {cmp_m['before_strike_deg']:.1f}° → Coseismic: {cmp_m['coseismic_strike_deg']:.1f}°",
-                f"Aftershock Plane: {cmp_m['after_strike_deg']:.1f}° (Dip {cmp_m['post_aftershock_dip_deg']:.1f}°, L={cmp_m['post_aftershock_length_km']:.0f} km)",
+                f"Aftershock Plane: {cmp_m['after_strike_deg']:.1f}° (Dip {dip_txt}, L={cmp_m['post_aftershock_length_km']:.0f} km)",
                 f"Strike Rotation Δ: {cmp_m['strike_change_deg']:.1f}° | Centroid Shift: {cmp_m['centroid_shift_km']:.1f} km",
                 f"Peak Slip: {hm['peak_fault_slip_m']:.2f} m | Top-25% Slip: {hm['top_quartile_fault_slip_m']:.2f} m",
                 f"L-geo Skill: {bm['l_geo']['composite_skill']:.2f} (w={bm['l_geo']['assigned_weight']:.2f})",
