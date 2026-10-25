@@ -3,7 +3,8 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{fontspec}
-\setmainfont{Noto Serif}
+% Times New Roman (Nimbus Roman metric-compatible OpenType typeface)
+\setmainfont{Nimbus Roman}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{hyperref}
@@ -44,33 +45,26 @@ Quantifying the kinematic behaviour of seismogenic fault systems across their fu
 
 To date, mathematical frameworks for fault analysis have bifurcated. On the one hand, geodetic geodesy relies on static elastic half-space dislocations \cite{okada1985} driven by Global Navigation Satellite System (GNSS) observations to infer slip distributions. On the other hand, non-linear time series analysis has applied chaos theory and dynamical systems techniques (e.g., Lyapunov exponents, sample entropy, fractal correlation dimension) to seismic time series, searching for non-linear precursors or localized changes in ambient crustal predictability \cite{wolf1985, rosenstein1993, sarwar2023}. However, these approaches have rarely been integrated into an automated, quantitative spatial framework.
 
-In this work, we design and implement \texttt{chaosmap}, an open-source, reproducible C++23 framework that unifies:
+Turkey occupies an active tectonic wedge squeezed westward between the colliding Arabian and Eurasian plates. The motion is accommodated primarily by the dextral North Anatolian Fault Zone (NAFZ), the sinistral East Anatolian Fault Zone (EAFZ), and the complex collision/thrust structures of the Bitlis-Zagros suture zone in Eastern Anatolia. To study this spectrum of deformation, we investigate two landmark earthquakes representing contrasting tectonic environments:
 \begin{itemize}
-    \item Continuous GNSS trajectory decomposition into robust MIDAS interseismic velocities and coseismic step vectors across Turkey (Nevada Geodetic Laboratory IGS20 processing);
-    \item Distributed slip inversions on arbitrary 3D rectangular dislocations with spatial Laplacian smoothing;
-    \item Automated 3D hypocentre plane fitting and along-strike segmentation via orthogonal regression;
-    \item Two competing implementations of dynamical Lyapunov exponents:
-    \begin{enumerate}
-        \item \textbf{$L_{\text{geo}}$ (Geodetic Finite-Time Lyapunov Exponents):} Spatial hyperbolic coherent structures computed via forward/backward Runge-Kutta 4th order (RK4) advection of the GNSS velocity gradient tensor and Cauchy-Green strain invariants;
-        \item \textbf{$L_{\text{seis}}$ (Broadband Seismic Lyapunov Exponents):} Time-delay embedded non-linear phase-space divergence ($\lambda_{\text{Wolf}}$ and $\lambda_{\text{Rosenstein}}$) extracted from continuous broadband seismograms, protected by Lee (1972) earthquake coda masking and ocean microseism control-band subtraction.
-    \end{enumerate}
-    \item A quantitative skill benchmark comparing $L_{\text{geo}}$ and $L_{\text{seis}}$ against inverted rupture geometries;
-    \item Four-panel publication cartography (Before, Moved, After, Change) generated without proprietary GIS dependencies.
+    \item \textbf{The 23 October 2011 Van-Erci\c{s} Earthquake ($M_w\,7.1$):} A blind reverse rupture north of Lake Van with minimal primary surface rupture, requiring geodetic inversion and 3D aftershock geometry to delineate fault parameters. Four continuous broadband seismic stations (`DYDN`, `GEVA`, `TVAN`, `VMUR`) operated within $100\text{ km}$ of the epicenter.
+    \item \textbf{The 6 February 2023 Kahramanmara\c{s} Mainshock ($M_w\,7.8$):} A major strike-slip rupture on the East Anatolian Fault Zone with left-lateral surface offsets exceeding $6\text{ m}$ and exceptional near-field GNSS coseismic displacements (up to $4.67\text{ m}$ horizontally at station EKZ1).
 \end{itemize}
 
-\section{Geological Setting and Case Study Selections}
-Turkey occupies an active tectonic wedge squeezed westward between the colliding Arabian and Eurasian plates. The motion is accommodated primarily by the dextral North Anatolian Fault Zone (NAFZ), the sinistral East Anatolian Fault Zone (EAFZ), and the complex collision/thrust structures of the Bitlis-Zagros suture zone in Eastern Anatolia.
+In this work, we present \texttt{chaosmap}, an open-source, reproducible C++23 computational architecture that synthesizes continuous GNSS geodesy, 3D hypocentre manifolds, and two competing implementations of non-linear Lyapunov exponents ($L_{\text{geo}}$ and $L_{\text{seis}}$) into publication-quality four-panel kinematic synthesis cartography.
 
-We evaluate the framework on two landmark earthquakes demonstrating opposing tectonic mechanisms:
+\section{Materials and Methods}
+
+\subsection{Data Sources and Observational Materials}
+The \texttt{chaosmap} pipeline unifies three independent geophysical observational data streams:
 \begin{enumerate}
-    \item \textbf{The 23 October 2011 Van-Erci\c{s} Earthquake ($M_w\,7.1$):} Occurring north of Lake Van on a previously unmapped, south-dipping blind reverse fault. This event produced minimal primary surface rupture, making geodetic inversion and 3D aftershock geometry critical for establishing fault strike, dip, and slip magnitude. Four continuous broadband seismic stations (`DYDN`, `GEVA`, `TVAN`, `VMUR`) operated within $100\text{ km}$ of the rupture.
-    \item \textbf{The 6 February 2023 Kahramanmara\c{s} Mainshock ($M_w\,7.8$):} A major strike-slip earthquake on the East Anatolian Fault Zone. Producing left-lateral offsets exceeding $6\text{ m}$ on the ground, this event triggered exceptional near-field GNSS coseismic offsets (up to $4.67\text{ m}$ horizontally at station EKZ1).
+    \item \textbf{Continuous GNSS Time-Series:} Daily position coordinates in the IGS20 reference frame are retrieved from the Nevada Geodetic Laboratory (NGL) archive, encompassing 273 permanent GNSS stations across Turkey. Station trajectory histories span from 2005 through 2024, providing multi-year inter-seismic velocity baselines and high-precision daily coordinates before and after major events. Documented instrumental offsets, antenna replacements, and known earthquake offsets are cross-referenced with the NGL `steps.txt` metadata catalog.
+    \item \textbf{Regional Seismicity Catalog:} Earthquake hypocentral locations, origin times, focal depths, and magnitudes are extracted from the official Disaster and Emergency Management Authority (AFAD) earthquake catalog. Events are partitioned into a pre-seismic background window ($t < t_{\text{event}}$) and a 30-day post-seismic aftershock catalog ($t_{\text{event}} \le t \le t_{\text{event}} + 30\text{ d}$) within an epicentral search radius of $R_{\max} = 150\text{ km}$.
+    \item \textbf{Broadband Continuous Seismic Waveforms:} Raw 3-component continuous waveform archives (vertical and horizontal channels sampled at 50 Hz) are ingested directly from the Turkish National Seismic Network (TDVMS) repository in miniSEED-2 binary format wrapped in ZIP archives.
 \end{enumerate}
 
-\section{Mathematical Formulations and Methods}
-
-\subsection{GNSS Trajectory Decomposition}
-Daily GNSS position time series in the IGS20 reference frame are ingested from the Nevada Geodetic Laboratory (NGL) `.tenv3` archive. For each station, the horizontal position vector $\mathbf{x}(t) = [e(t), n(t)]^T$ is modelled over an inter-seismic baseline $t \in [t_{\text{event}} - T_{\text{pre}}, t_{\text{event}}]$ using robust non-parametric paired slopes (MIDAS):
+\subsection{GNSS Trajectory Decomposition and Coseismic Step Estimation}
+For each station, the horizontal position vector $\mathbf{x}(t) = [e(t), n(t)]^T$ is modelled over an inter-seismic baseline $t \in [t_{\text{event}} - T_{\text{pre}}, t_{\text{event}}]$ using robust non-parametric paired slopes (MIDAS):
 \begin{equation}
 \mathbf{v} = \text{median}\left\{ \frac{\mathbf{x}(t_j) - \mathbf{x}(t_i)}{t_j - t_i} \;\middle|\; 340\text{ d} \le |t_j - t_i| \le 390\text{ d} \right\}
 \end{equation}
@@ -82,7 +76,7 @@ The coseismic displacement vector $\Delta \mathbf{u} = [\Delta e, \Delta n, \Del
 \end{equation}
 In parallel, a full trajectory model incorporating Heaviside step functions for documented equipment changes (from the NGL `steps.txt` database), coseismic offsets, and post-seismic logarithmic relaxation $\ln(1 + \Delta t / \tau)$ is inverted via Singular Value Decomposition (SVD) with covariance propagation.
 
-\subsection{Elastic Dislocation and Distributed Slip Inversion}
+\subsection{Elastic Dislocation Modeling and Distributed Slip Inversion}
 Surface displacements due to slip on a rectangular dislocation embedded in an isotropic, homogeneous elastic half-space are calculated using the exact closed-form expressions of Okada (1985) \cite{okada1985}. A fault patch $\mathcal{P}_k$ is parameterized by centroid position $(x_k, y_k, d_k)$, along-strike length $L_k$, down-dip width $W_k$, strike azimuth $\phi$, dip angle $\delta$, and slip vector $\mathbf{s}_k = [s_{\text{strike}}, s_{\text{dip}}]^T$.
 
 The Green's function matrix $\mathbf{G} \in \mathbb{R}^{3M \times 2K}$ relates the slip vector $\mathbf{s} \in \mathbb{R}^{2K}$ across all $K$ patches to the predicted coseismic displacements at $M$ GNSS stations:
@@ -101,7 +95,7 @@ M_0 = \mu \sum_{k=1}^K L_k W_k \|\mathbf{s}_k\|, \quad M_w = \frac{2}{3} \left( 
 \end{equation}
 with shear modulus $\mu = 30\text{ GPa}$.
 
-\subsection{3D Seismicity Fault-Plane Fitting}
+\subsection{3D Seismicity Manifolds and Geometric Regression}
 To establish independent geometric constraints from the seismic catalog (AFAD database), events within a radial distance $R \le R_{\max}$ are partitioned into pre-seismic background ($t < t_{\text{event}}$) and post-seismic aftershocks ($t_{\text{event}} \le t \le t_{\text{event}} + \Delta t$).
 
 We implement a robust two-stage regression:
@@ -149,7 +143,7 @@ Continuous raw vertical and horizontal seismic channels (50 Hz sampling) are ret
     \item \textbf{Array Dispersion and Time-Slide Null Test:} Daily station medians are transformed into robust $z$-scores $z_{\text{IQR}} = (x_t - \text{median}) / (\text{IQR}/1.349)$. Multi-station spatial dispersion $\text{std}_s(z_s)$ is tested against circular time-slide surrogate nulls (shifting each station's timeline independently) to establish rigorous $p$-values.
 \end{enumerate}
 
-\subsection{Lyapunov Candidate Benchmark and Multi-Layer Fusion}
+\subsection{Lyapunov Candidate Benchmark and Multi-Layer Kinematic Fusion}
 To evaluate whether geodetic coherent structures ($L_{\text{geo}}$) or seismic waveform divergence ($L_{\text{seis}}$) provides superior fault localization, we introduce a quantitative benchmark scoring both candidates against the independently inverted coseismic rupture trace:
 \begin{equation}
 \mathcal{S} = w_1 \cdot \text{AUC}_{\text{spatial}} + w_2 \cdot \exp\left(-\frac{d_{\text{fault}}}{D_0}\right) + w_3 \cdot \left(1 - \frac{|\Delta \phi|}{90^\circ}\right) + w_4 \cdot \text{AUC}_{\text{temporal}}
@@ -164,10 +158,10 @@ The final state fields are synthesized on a $0.05^\circ$ geographic grid:
 \Delta \mathcal{F}_{\text{Change}} &= \mathcal{F}_{\text{After}} - \mathcal{F}_{\text{Before}}
 \end{align}
 
-\section{Experimental Results}
+\section{Results}
 
-\subsection{Verification of Okada (1985) Elastic Kernel}
-We first verified our C++23 dislocation kernel against the reference benchmark values published in Okada (1985, Table 2) \cite{okada1985} for a fault dipping at $\delta = 70^\circ$ with Poisson's ratio $\nu = 0.25$. As presented in Table~\ref{tab:okada_bench}, all strike-slip, dip-slip, and tensile displacement components agree to within $<2\times 10^{-5}\text{ m}$, confirming numerical fidelity before inversion.
+\subsection{Analytical Dislocation Kernel Benchmark (Okada 1985)}
+We first verified our C++23 dislocation kernel against the reference benchmark values published in Okada (1985, Table 2) \cite{okada1985} for a fault dipping at $\delta = 70^\circ$ with Poisson's ratio $\nu = 0.25$. As presented in Table~\ref{tab:okada_bench}, all strike-slip, dip-slip, and tensile displacement components agree to within $<2\times 10^{-5}\text{ m}$ ($1.0 \times 10^{-7}$ relative precision), confirming numerical fidelity before inversion.
 
 \begin{table}[htbp]
 \centering
@@ -192,7 +186,7 @@ Tensile ($U_3=1$)     & $u_x$ & $+0.013406$ & $+0.0134061$ & $1.0 \times 10^{-7}
 \end{tabular}
 \end{table}
 
-\subsection{Case Study 1: The 2011 Van Earthquake ($M_w\,7.1$)}
+\subsection{Case Study 1: The 2011 Van Earthquake (\textit{M}\textsubscript{w} 7.1)}
 The 23 October 2011 Van earthquake occurred on a blind thrust fault dipping south beneath the Erci\c{s}-Van basin. The \texttt{chaosmap} inversion processed 32 regional GNSS stations (29 interseismic velocities, 19 coseismic offsets) within $240\text{ km}$ and 4 continuous broadband seismic stations (`DYDN`, `GEVA`, `TVAN`, `VMUR`).
 
 \begin{figure}[htbp]
@@ -206,12 +200,12 @@ The 23 October 2011 Van earthquake occurred on a blind thrust fault dipping sout
 \label{fig:van4panel}
 \end{figure}
 
-The inverted fault parameters and kinematics are summarized in Table~\ref{tab:van_params}. The fault plane strikes $248.0^\circ$ (ENE-WSW) and dips $50.5^\circ$ SSE, with a reverse-slip rake of $68.1^\circ$. The estimated geodetic seismic moment is $5.30 \times 10^{19}\text{ N}\cdot\text{m}$ ($M_w\,7.08$, matching the seismological catalog $M_w\,7.10$), yielding an exceptional variance reduction of $97.39\%$. Peak distributed slip reaches $2.48\text{ m}$ at a depth of $12\text{--}14\text{ km}$, with a top-quartile slip mean of $2.43\text{ m}$. At station MRDY ($37.2\text{ km}$ northeast of the epicenter), the coseismic horizontal offset reaches $60.02\text{ mm}$ ($\Delta e = -17.43\text{ mm}$, $\Delta n = -57.43\text{ mm}$, $\Delta u = -12.16\text{ mm}$).
+The inverted fault parameters and kinematics are summarized in Table~\ref{tab:fault_params}. The fault plane strikes $248.0^\circ$ (ENE-WSW) and dips $50.5^\circ$ SSE, with a reverse-slip rake of $68.1^\circ$. The estimated geodetic seismic moment is $5.30 \times 10^{19}\text{ N}\cdot\text{m}$ ($M_w\,7.08$, matching the seismological catalog $M_w\,7.10$), yielding an exceptional variance reduction of $97.39\%$. Peak distributed slip reaches $2.48\text{ m}$ at a depth of $12\text{--}14\text{ km}$, with a top-quartile slip mean of $2.43\text{ m}$. At station MRDY ($37.2\text{ km}$ northeast of the epicenter), the coseismic horizontal offset reaches $60.02\text{ mm}$ ($\Delta e = -17.43\text{ mm}$, $\Delta n = -57.43\text{ mm}$, $\Delta u = -12.16\text{ mm}$).
 
 \begin{table}[htbp]
 \centering
 \caption{Inversion parameters and kinematic metrics for the 2011 Van and 2023 Kahramanmara\c{s} earthquakes.}
-\label{tab:van_params}
+\label{tab:fault_params}
 \begin{tabular}{lrr}
 \toprule
 Metric & 2011 Van-Erci\c{s} & 2023 Kahramanmara\c{s} \\
@@ -236,7 +230,6 @@ Centroid Migration Distance & $75.9\text{ km}$ & $136.1\text{ km}$ \\
 \end{tabular}
 \end{table}
 
-\subsubsection{Broadband Lyapunov Anomaly and Spatial Dissipation Gradient}
 The multi-station broadband waveform analysis reveals striking pre- and post-seismic dynamics (Table~\ref{tab:van_lyapunov}). In the 3 days preceding the mainshock, the multi-station array dispersion achieves a ROC AUC of $0.733$ ($p = 0.125$ against circular time-slide nulls), demonstrating detectable loss of ambient crustal predictability.
 
 \begin{table}[htbp]
@@ -262,7 +255,7 @@ Station TVAN ($23.7\text{ km}$ away) collapses from $0.671\text{ bits/s}$ pre-se
 
 In the quantitative benchmark, $L_{\text{seis}}$ achieves a spatial ROC AUC of $0.898$ against the rupture corridor, an alignment misfit of only $30.8^\circ$, and an overall composite skill of $0.739$ (assigned weight $68.8\%$), out-performing the regional $L_{\text{geo}}$ field (assigned weight $31.2\%$) due to the high density of near-field broadband stations.
 
-\subsection{Case Study 2: The 2023 Kahramanmara\c{s} Earthquake ($M_w\,7.8$)}
+\subsection{Case Study 2: The 2023 Kahramanmara\c{s} Earthquake (\textit{M}\textsubscript{w} 7.8)}
 The 6 February 2023 Kahramanmara\c{s} rupture represents an extreme strike-slip benchmark. We inverted 39 regional GNSS stations (18 with coseismic offsets) and 9649 regional earthquakes.
 
 \begin{figure}[htbp]
@@ -276,7 +269,7 @@ The 6 February 2023 Kahramanmara\c{s} rupture represents an extreme strike-slip 
 \label{fig:kahramanmaras4panel}
 \end{figure}
 
-The single-plane geometry search recovers a strike of $213.5^\circ$ (parallel to the Pazarc\i k segment of the EAFZ), a near-vertical dip of $85.0^\circ$, and pure left-lateral strike-slip rake of $11.7^\circ$ (Table~\ref{tab:van_params}). The geodetic moment is $5.93 \times 10^{20}\text{ N}\cdot\text{m}$ ($M_w\,7.78$, matching catalog $M_w\,7.80$), with a variance reduction of $77.47\%$.
+The single-plane geometry search recovers a strike of $213.5^\circ$ (parallel to the Pazarc\i k segment of the EAFZ), a near-vertical dip of $85.0^\circ$, and pure left-lateral strike-slip rake of $11.7^\circ$ (Table~\ref{tab:fault_params}). The geodetic moment is $5.93 \times 10^{20}\text{ N}\cdot\text{m}$ ($M_w\,7.78$, matching catalog $M_w\,7.80$), with a variance reduction of $77.47\%$.
 
 Observed GNSS coseismic offsets (Table~\ref{tab:kahraman_gnss}) document extraordinary crustal deformation: station EKZ1 ($60.1\text{ km}$ north-northwest of the hypocentre) moved \textbf{$4.67\text{ m}$} horizontally ($\Delta e = -4646.1\text{ mm}$, $\Delta n = +487.5\text{ mm}$, $\Delta u = -127.0\text{ mm}$). Station KAHR displaced by $620.9\text{ mm}$, ANTP by $419.9\text{ mm}$, and TUF1 by $360.8\text{ mm}$. Distributed inversion localizes peak slip of $22.05\text{ m}$ on shallow patches near the Pazarc\i k-Gaziantep boundary, with a top-quartile average slip of $11.99\text{ m}$.
 
@@ -306,9 +299,7 @@ VIR4 & $234.6\text{ km}$ & $+71.27$ & $-22.78$ & $-25.30$ & \textbf{74.82} & $19
 
 Because NGL public archive records for TUSAGA stations suffered a multi-year archive gap between 2015 and 2020, pre-event continuous broadband data for Kahramanmara\c{s} was unavailable in the open archive. The benchmark algorithm automatically recognized this, weighting $L_{\text{geo}}$ at $100\%$ ($w_{\text{geo}} = 1.0, w_{\text{seis}} = 0.0$) and demonstrating the robust modularity of the fusion framework.
 
-\section{Discussion}
-
-\subsection{Complementarity of Geodetic FTLE and Seismic Lyapunov Dynamics}
+\subsection{Coupled Kinematic Synthesis and Discussion}
 Our benchmark comparisons in the Van 2011 event demonstrate why multi-physics coupling is essential:
 \begin{itemize}
     \item \textbf{$L_{\text{geo}}$ (Lagrangian FTLE):} Operates on the inter-seismic crustal strain tensor over spatial scales of tens to hundreds of kilometers. It excels at demarcating major tectonic suture lines and crustal block boundaries where regional velocity gradients shear virtual tracer trajectories. However, because GNSS stations have typical spatial spacings of $30\text{--}50\text{ km}$, $L_{\text{geo}}$ cannot resolve localized blind faults until significant strain accumulation is sustained.
@@ -317,7 +308,6 @@ Our benchmark comparisons in the Van 2011 event demonstrate why multi-physics co
 
 By dynamically evaluating candidate skill $\mathcal{S}$ against independent rupture geometries, \texttt{chaosmap} avoids heuristic weighting and objectively selects the optimal observational balance.
 
-\subsection{Computational Performance}
 All heavy numerical operations were implemented in C++23 with multi-threaded oneTBB and LAPACK execution:
 \begin{itemize}
     \item Multi-station GNSS trajectory modeling: $<0.25\text{ s}$ for 40 stations across 15 years;
@@ -337,7 +327,7 @@ In this study, we introduced and validated \texttt{chaosmap}, a unified C++23 co
     \item The automated four-panel synthesis maps (Before, Moved, After, Change) provide an intuitive, reproducible product for visualising and quantifying fault movement.
 \end{enumerate}
 
-All code, configuration files, unit tests, and output datasets are available in the project repository: \url{https://github.com/oguzb/chaosmap}.
+All code, configuration files, unit tests, and output datasets are available in the project repository: \url{https://github.com/SismoKaos-Research/chaosmap}.
 
 \begin{thebibliography}{10}
 
