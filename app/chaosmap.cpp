@@ -9,6 +9,7 @@
 #include "io/tenv3.hpp"
 #include "okada/inversion.hpp"
 #include "out/export.hpp"
+#include "seis/completeness.hpp"
 #include "seis/planes.hpp"
 #include "study/lseis_study.hpp"
 
@@ -37,26 +38,61 @@ void print_usage() {
             << "  chaosmap [all|gnss|invert|seismicity|lyapunov|fuse] --config "
                "<case.toml>\n"
             << "  chaosmap lseis-study --config <case.toml> [--surrogates N]\n"
+            << "      [--pre-days D] [--post-days D] [--mask-mag M|mc] "
+               "[--tag NAME]\n"
             << "      Surrogate-controlled test of the L-seis change across "
-               "the mainshock\n";
+               "the mainshock.\n"
+            << "      --mask-mag mc masks every catalog event at or above "
+               "the pre-event\n"
+            << "      magnitude of completeness; --tag suffixes the output "
+               "file names.\n";
 }
+
+struct StudyOptions {
+  chaosmap::study::LseisStudyParams params;
+  std::string mask_mag; // number, "mc", or empty for the default
+  std::string tag;
+};
 
 // `lseis-study`: does the post-mainshock change of the broadband Wolf
 // exponent survive IAAFT surrogates and spectral covariates?
-int run_lseis_study(const chaosmap::core::CaseConfig &cfg, int n_surrogates) {
+int run_lseis_study(const chaosmap::core::CaseConfig &cfg, StudyOptions opt) {
   using namespace chaosmap;
+  auto &params = opt.params;
+  // Every catalogued magnitude, so the mask can go below the pipeline's 2.5
   const auto events = io::read_catalog_csv(
       cfg.paths.catalog_csv, cfg.region.lat_min, cfg.region.lat_max,
-      cfg.region.lon_min, cfg.region.lon_max, 2.5);
-  study::LseisStudyParams params;
-  params.n_surrogates = n_surrogates;
+      cfg.region.lon_min, cfg.region.lon_max, -10.0);
+
+  // Magnitude of completeness before and after the mainshock over the span
+  const auto origin_s = static_cast<double>(cfg.event.origin_epoch_s);
+  std::vector<double> mags_pre, mags_post;
+  for (const auto &e : events) {
+    const double d = (static_cast<double>(e.epoch_s) - origin_s) / 86400.0;
+    if (d >= -params.pre_days && d < 0.0)
+      mags_pre.push_back(e.magnitude);
+    else if (d >= 0.0 && d <= params.post_days)
+      mags_post.push_back(e.magnitude);
+  }
+  const double mc_pre = seis::max_curvature_mc(mags_pre);
+  const double mc_post = seis::max_curvature_mc(mags_post);
+  if (opt.mask_mag == "mc") {
+    if (!std::isfinite(mc_pre)) {
+      std::cout << "[lseis-study] no pre-event catalog events for Mc\n";
+      return EXIT_FAILURE;
+    }
+    params.mask_min_mag = mc_pre;
+  } else if (!opt.mask_mag.empty()) {
+    params.mask_min_mag = std::stod(opt.mask_mag);
+  }
+
   const auto res = study::run_lseis_study(cfg, events, params);
   if (res.stations.empty()) {
     std::cout << "[lseis-study] no broadband stations with waveforms in "
               << cfg.paths.broadband_dir << "\n";
     return EXIT_FAILURE;
   }
-  out::export_lseis_study(cfg, res);
+  out::export_lseis_study(cfg, res, opt.tag);
 
   auto effect = [](const study::Effect &e) {
     std::ostringstream os;
@@ -64,6 +100,14 @@ int run_lseis_study(const chaosmap::core::CaseConfig &cfg, int n_surrogates) {
        << std::noshowpos << " [" << e.ci_lo << ", " << e.ci_hi << "]";
     return os.str();
   };
+  std::size_t n_masked = 0;
+  for (const auto &e : events)
+    n_masked += (e.magnitude >= params.mask_min_mag) ? 1 : 0;
+  std::cout << std::fixed << std::setprecision(1)
+            << "[lseis-study] span origin -" << params.pre_days << " d / +"
+            << params.post_days << " d; catalog Mc pre=" << mc_pre
+            << ", post=" << mc_post << "; masking M>=" << params.mask_min_mag
+            << " (" << n_masked << " events in the region catalog)\n";
   std::cout << "[lseis-study] " << res.windows.size() << " windows, "
             << params.n_surrogates
             << " IAAFT surrogates each; post - pre means with 95% day-block "
@@ -92,7 +136,7 @@ int run_lseis_study(const chaosmap::core::CaseConfig &cfg, int n_surrogates) {
 int main(int argc, char **argv) {
   std::string subcmd = "all";
   std::string config_path;
-  int n_surrogates = chaosmap::study::LseisStudyParams{}.n_surrogates;
+  StudyOptions study_opt;
 
   for (int i = 1; i < argc; ++i) {
     const std::string_view arg = argv[i];
@@ -104,10 +148,16 @@ int main(int argc, char **argv) {
       if (i + 1 < argc) {
         config_path = argv[++i];
       }
-    } else if (arg == "--surrogates") {
-      if (i + 1 < argc) {
-        n_surrogates = std::atoi(argv[++i]);
-      }
+    } else if (arg == "--surrogates" && i + 1 < argc) {
+      study_opt.params.n_surrogates = std::atoi(argv[++i]);
+    } else if (arg == "--pre-days" && i + 1 < argc) {
+      study_opt.params.pre_days = std::atof(argv[++i]);
+    } else if (arg == "--post-days" && i + 1 < argc) {
+      study_opt.params.post_days = std::atof(argv[++i]);
+    } else if (arg == "--mask-mag" && i + 1 < argc) {
+      study_opt.mask_mag = argv[++i];
+    } else if (arg == "--tag" && i + 1 < argc) {
+      study_opt.tag = argv[++i];
     } else if (!arg.starts_with("--") && config_path.empty() &&
                arg.ends_with(".toml")) {
       config_path = std::string(arg);
@@ -136,7 +186,7 @@ int main(int argc, char **argv) {
                "=====\n";
 
   if (subcmd == "lseis-study")
-    return run_lseis_study(cfg, n_surrogates);
+    return run_lseis_study(cfg, study_opt);
 
   // 1. GNSS Station Loading & Trajectory Decomposition
   const auto steps =

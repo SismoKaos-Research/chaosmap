@@ -8,7 +8,8 @@
 // - `grids.csv`
 // - `fault_features.geojson` (RFC 7946 GeoJSON for GIS / web viewers).
 // and, for the `lseis-study` subcommand (`export_lseis_study`):
-// - `lseis_study_stations.csv` & `lseis_study_windows.csv`
+// - `lseis_study_stations.csv`, `lseis_study_windows.csv` &
+//   `lseis_study_daily.csv`
 
 #include "anomaly/array_anomaly.hpp"
 #include "core/config.hpp"
@@ -25,6 +26,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <map>
 #include <span>
 #include <string>
 
@@ -367,10 +369,14 @@ inline void export_case_results(
   }
 }
 
+// `tag`, if given, is appended to the file names (`lseis_study_*_<tag>.csv`)
+// so runs with different settings can sit side by side.
 inline void export_lseis_study(const core::CaseConfig &cfg,
-                               const study::LseisStudyResult &res) {
+                               const study::LseisStudyResult &res,
+                               const std::string &tag = {}) {
   namespace fs = std::filesystem;
   const fs::path out_dir = cfg.paths.out_dir;
+  const std::string sfx = tag.empty() ? std::string{} : "_" + tag;
   fs::create_directories(out_dir);
   // Non-finite values (e.g. too few days for a bootstrap) are empty cells
   auto num =[](std::ostream &os, double v) -> std::ostream & {
@@ -380,7 +386,7 @@ inline void export_lseis_study(const core::CaseConfig &cfg,
   };
 
   {
-    std::ofstream f(out_dir / "lseis_study_stations.csv");
+    std::ofstream f(out_dir / ("lseis_study_stations" + sfx + ".csv"));
     f << std::fixed << std::setprecision(5);
     f << "station,channel,lat,lon,dist_km,n_pre,n_post,frac_nonlinear_pre,"
          "frac_nonlinear_post,r2_surr,r2_covariates";
@@ -405,7 +411,7 @@ inline void export_lseis_study(const core::CaseConfig &cfg,
   }
 
   {
-    std::ofstream f(out_dir / "lseis_study_windows.csv");
+    std::ofstream f(out_dir / ("lseis_study_windows" + sfx + ".csv"));
     f << std::fixed << std::setprecision(5);
     f << "station,start_mjd,rel_day,post,wolf,surr_mean,surr_sd,surr_z,"
          "surr_rank,n_surr,mean_period_s,log10_rms_fault,log10_rms_ctrl\n";
@@ -418,6 +424,33 @@ inline void export_lseis_study(const core::CaseConfig &cfg,
       for (double v : {w.mean_period_s, w.log10_rms_fault, w.log10_rms_ctrl})
         num(f << ',', v);
       f << '\n';
+    }
+  }
+
+  // Per station and day relative to the origin: window count, share outside
+  // the surrogate range, and mean Wolf / surrogate mean / excess
+  {
+    std::ofstream f(out_dir / ("lseis_study_daily" + sfx + ".csv"));
+    f << std::fixed << std::setprecision(5);
+    f << "station,rel_day,n_windows,frac_nonlinear,mean_wolf,mean_surr,"
+         "mean_excess\n";
+    struct Acc {
+      std::size_t n{0}, n_nl{0};
+      double wolf{0.0}, surr{0.0};
+    };
+    std::map<std::pair<std::size_t, int>, Acc> acc;
+    for (const auto &w : res.windows) {
+      auto &a = acc[{w.station_idx, w.rel_day}];
+      ++a.n;
+      a.n_nl += (w.surr_rank <= 0.0 || w.surr_rank >= 1.0) ? 1 : 0;
+      a.wolf += w.wolf;
+      a.surr += w.surr_mean;
+    }
+    for (const auto &[key, a] : acc) {
+      const auto n = static_cast<double>(a.n);
+      f << res.stations[key.first].station << ',' << key.second << ',' << a.n
+        << ',' << static_cast<double>(a.n_nl) / n << ',' << a.wolf / n << ','
+        << a.surr / n << ',' << (a.wolf - a.surr) / n << '\n';
     }
   }
 }

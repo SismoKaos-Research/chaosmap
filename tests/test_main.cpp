@@ -13,6 +13,7 @@
 #include "io/zip_mseed.hpp"
 #include "okada/inversion.hpp"
 #include "okada/okada85.hpp"
+#include "seis/completeness.hpp"
 #include "seis/planes.hpp"
 #include "study/lseis_study.hpp"
 
@@ -799,6 +800,22 @@ void test_lseis_study_effects() {
   CHECK_NEAR(st.frac_nonlinear_pre, 0.0, 1e-12);
 }
 
+void test_max_curvature_mc() {
+  using namespace chaosmap;
+  // Gutenberg-Richter (b = 1) magnitudes above 2.45, i.e. complete from the
+  // 2.5 bin up, plus a detection-limited tail below it
+  std::mt19937_64 rng(5);
+  std::exponential_distribution<double> gr(std::log(10.0));
+  std::uniform_real_distribution<double> tail(1.5, 2.45);
+  std::vector<double> mags;
+  for (int i = 0; i < 5000; ++i)
+    mags.push_back(2.45 + gr(rng));
+  for (int i = 0; i < 300; ++i)
+    mags.push_back(tail(rng));
+  CHECK_NEAR(seis::max_curvature_mc(mags), 2.7, 1e-9); // mode 2.5 + 0.2
+  CHECK(std::isnan(seis::max_curvature_mc({})));
+}
+
 } // namespace
 
 int main() {
@@ -818,6 +835,7 @@ int main() {
   test_channel_selector();
   test_iaaft_surrogate_test();
   test_lseis_study_effects();
+  test_max_curvature_mc();
   if (g_failures == 0) {
     std::cout << "[PASS] All chaosmap tests passed";
     if (g_skipped > 0)

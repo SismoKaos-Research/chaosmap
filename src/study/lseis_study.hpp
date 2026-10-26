@@ -37,14 +37,21 @@ namespace chaosmap::study {
 
 inline constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
-// Defaults mirror the window selection and features of
-// `anomaly::analyze_broadband_array`, so the study tests the same numbers the
-// fusion pipeline uses.
+// Defaults mirror the windows and features of
+// `anomaly::analyze_broadband_array` (span, window length and spacing,
+// exclusion around the origin, catalog mask), so the study tests the numbers
+// the fusion pipeline uses. Unlike the pipeline, window starts sit on a fixed
+// grid `origin + k * stride` rather than counting from each trace's start, so
+// every station is sampled at the same times and chunked loading does not
+// move them.
 struct LseisStudyParams {
   double pre_days{8.0};
   double post_days{7.0};
   double win_sec{600.0};
   std::size_t stride_windows{18}; // one window every 3 h
+  // Waveforms are loaded this many days at a time to bound memory (about
+  // 0.3 GB per 100 Hz station-chunk).
+  double chunk_days{4.0};
   double target_fs{5.0};
   double fault_fmin{0.05};
   double fault_fmax{0.50};
@@ -310,43 +317,45 @@ run_lseis_study(const core::CaseConfig &cfg,
   }
   std::ranges::sort(sta_dirs);
 
-  // 1. Load each station's selected channel (one thread per station)
-  struct StationData {
-    StationStudy info;
-    std::vector<io::mseed::ContinuousTrace> traces;
-    bool ok{false};
-  };
-  std::vector<StationData> data(sta_dirs.size());
-  {
-    std::vector<std::thread> loaders;
-    for (std::size_t s = 0; s < sta_dirs.size(); ++s) {
-      loaders.emplace_back([&, s]() {
-        auto &sd = data[s];
-        sd.info.station = sta_dirs[s].filename().string();
-        for (const auto &sc : coords) {
-          if (sc.station == sd.info.station) {
-            sd.info.lat_deg = sc.lat_deg;
-            sd.info.lon_deg = sc.lon_deg;
-            break;
-          }
-        }
-        if (sd.info.lat_deg == 0.0 && sd.info.lon_deg == 0.0)
-          return;
-        sd.info.dist_km = geo::haversine_km(sd.info.lat_deg, sd.info.lon_deg,
-                                            cfg.event.lat, cfg.event.lon);
-        sd.traces = io::load_station_waveforms(sta_dirs[s], min_mjd, max_mjd);
-        if (sd.traces.empty())
-          return;
-        sd.info.channel = sd.traces.front().channel;
-        sd.ok = true;
-      });
+  std::vector<StationStudy> infos(sta_dirs.size());
+  for (std::size_t s = 0; s < sta_dirs.size(); ++s) {
+    auto &info = infos[s];
+    info.station = sta_dirs[s].filename().string();
+    for (const auto &sc : coords) {
+      if (sc.station == info.station) {
+        info.lat_deg = sc.lat_deg;
+        info.lon_deg = sc.lon_deg;
+        break;
+      }
     }
-    for (auto &th : loaders)
-      th.join();
+    info.dist_km = geo::haversine_km(info.lat_deg, info.lon_deg, cfg.event.lat,
+                                     cfg.event.lon);
   }
-  std::erase_if(data, [](const StationData &sd) { return !sd.ok; });
 
-  // 2. Background windows, selected as in `analyze_broadband_array`
+  // 1. Background window starts on the grid `origin + k * stride`, excluding
+  //    the mainshock and the signal of catalog events
+  const double stride_days =
+      win_days * static_cast<double>(std::max<std::size_t>(1, p.stride_windows));
+  std::vector<double> starts;
+  for (auto k = static_cast<long>(std::ceil(-p.pre_days / stride_days));
+       origin_mjd + static_cast<double>(k) * stride_days + win_days <= max_mjd;
+       ++k) {
+    const double w_mjd = origin_mjd + static_cast<double>(k) * stride_days;
+    if (w_mjd < min_mjd)
+      continue;
+    if (w_mjd + win_days >= origin_mjd - p.exclude_before_days &&
+        w_mjd <= origin_mjd + p.exclude_after_days)
+      continue;
+    if (anomaly::detail::window_overlaps_catalog(w_mjd, w_mjd + win_days,
+                                                 events, p.mask_min_mag))
+      continue;
+    starts.push_back(w_mjd);
+  }
+
+  // 2. Chunk by chunk: load every station's selected channel (one thread per
+  //    station), then compute features and surrogate tests in parallel over
+  //    windows. Each window's surrogate seed depends only on its station and
+  //    start time, so results do not depend on scheduling or chunking.
   struct Job {
     std::size_t station_idx;
     const io::mseed::ContinuousTrace *trace;
@@ -354,38 +363,55 @@ run_lseis_study(const core::CaseConfig &cfg,
     std::size_t win_n;
     double start_mjd;
   };
-  std::vector<Job> jobs;
-  for (std::size_t s = 0; s < data.size(); ++s) {
-    for (const auto &tr : data[s].traces) {
-      if (tr.sample_rate_hz < 10.0)
-        continue;
-      const auto win_n =
-          static_cast<std::size_t>(std::llround(p.win_sec * tr.sample_rate_hz));
-      const std::size_t stride_n = win_n * p.stride_windows;
-      for (std::size_t off = 0; off + win_n <= tr.data.size();
-           off += stride_n) {
-        const double w_mjd =
-            tr.start_mjd +
-            (static_cast<double>(off) / tr.sample_rate_hz) / 86400.0;
-        if (w_mjd < min_mjd || w_mjd > max_mjd)
+  std::vector<WindowRecord> all_recs;
+  std::size_t next_start = 0;
+  for (double c0 = min_mjd; next_start < starts.size(); c0 += p.chunk_days) {
+    const double c1 = c0 + p.chunk_days;
+    std::vector<double> chunk_starts;
+    while (next_start < starts.size() && starts[next_start] < c1)
+      chunk_starts.push_back(starts[next_start++]);
+    if (chunk_starts.empty())
+      continue;
+
+    std::vector<std::vector<io::mseed::ContinuousTrace>> traces(
+        sta_dirs.size());
+    {
+      std::vector<std::thread> loaders;
+      for (std::size_t s = 0; s < sta_dirs.size(); ++s) {
+        if (infos[s].lat_deg == 0.0 && infos[s].lon_deg == 0.0)
+          continue; // no coordinates
+        loaders.emplace_back([&, s]() {
+          traces[s] = io::load_station_waveforms(sta_dirs[s], c0,
+                                                 chunk_starts.back() + win_days);
+        });
+      }
+      for (auto &th : loaders)
+        th.join();
+    }
+
+    std::vector<Job> jobs;
+    for (std::size_t s = 0; s < sta_dirs.size(); ++s) {
+      for (const auto &tr : traces[s]) {
+        if (tr.sample_rate_hz < 10.0)
           continue;
-        if (w_mjd + win_days >= origin_mjd - p.exclude_before_days &&
-            w_mjd <= origin_mjd + p.exclude_after_days)
-          continue;
-        if (anomaly::detail::window_overlaps_catalog(
-                w_mjd, w_mjd + win_days, events, p.mask_min_mag))
-          continue;
-        jobs.push_back({s, &tr, off, win_n, w_mjd});
+        if (infos[s].channel.empty())
+          infos[s].channel = tr.channel;
+        const auto win_n = static_cast<std::size_t>(
+            std::llround(p.win_sec * tr.sample_rate_hz));
+        for (double w_mjd : chunk_starts) {
+          const double off_s = (w_mjd - tr.start_mjd) * 86400.0;
+          if (off_s < 0.0)
+            continue;
+          const auto off =
+              static_cast<std::size_t>(std::llround(off_s * tr.sample_rate_hz));
+          if (off + win_n <= tr.data.size())
+            jobs.push_back({s, &tr, off, win_n, w_mjd});
+        }
       }
     }
-  }
 
-  // 3. Features and surrogate tests, in parallel over windows. Each window's
-  //    surrogate seed depends only on its station and start time, so results
-  //    do not depend on scheduling.
-  std::vector<WindowRecord> recs(jobs.size());
-  std::vector<std::uint8_t> valid(jobs.size(), 0);
-  {
+    std::vector<WindowRecord> recs(jobs.size());
+    std::vector<std::uint8_t> valid(jobs.size(), 0);
     std::atomic<std::size_t> next{0};
     const unsigned n_threads = std::max(1u, std::thread::hardware_concurrency());
     std::vector<std::thread> workers;
@@ -440,25 +466,36 @@ run_lseis_study(const core::CaseConfig &cfg,
     }
     for (auto &th : workers)
       th.join();
+    for (std::size_t j = 0; j < recs.size(); ++j)
+      if (valid[j])
+        all_recs.push_back(recs[j]);
   }
-  for (std::size_t j = 0; j < recs.size(); ++j)
-    if (valid[j])
-      out.windows.push_back(recs[j]);
+
+  // 3. Per-station statistics, over the stations that yielded windows
+  std::vector<std::uint8_t> used(sta_dirs.size(), 0);
+  for (const auto &r : all_recs)
+    used[r.station_idx] = 1;
+  std::vector<std::size_t> new_idx(sta_dirs.size(), 0);
+  for (std::size_t s = 0; s < sta_dirs.size(); ++s) {
+    if (used[s]) {
+      new_idx[s] = out.stations.size();
+      out.stations.push_back(infos[s]);
+    }
+  }
+  for (auto &r : all_recs)
+    r.station_idx = new_idx[r.station_idx];
+  out.windows = std::move(all_recs);
   std::ranges::sort(out.windows, [](const WindowRecord &a,
                                     const WindowRecord &b) {
     return (a.station_idx != b.station_idx) ? a.station_idx < b.station_idx
                                             : a.start_mjd < b.start_mjd;
   });
-
-  // 4. Per-station statistics
-  for (std::size_t s = 0; s < data.size(); ++s) {
+  for (std::size_t s = 0; s < out.stations.size(); ++s) {
     std::vector<const WindowRecord *> w;
     for (const auto &r : out.windows)
       if (r.station_idx == s)
         w.push_back(&r);
-    auto st = std::move(data[s].info);
-    detail::summarize_station(st, w, p, s);
-    out.stations.push_back(std::move(st));
+    detail::summarize_station(out.stations[s], w, p, s);
   }
   return out;
 }
