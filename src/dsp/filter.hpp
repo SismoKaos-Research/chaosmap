@@ -18,6 +18,13 @@
 
 namespace chaosmap::dsp {
 
+// FFTW's planner is not thread-safe: every plan creation and destruction in
+// the program must hold this mutex (`fftw_execute` itself is safe).
+[[nodiscard]] inline std::mutex &fftw_planner_mutex() {
+  static std::mutex m;
+  return m;
+}
+
 struct Biquad {
   double b0{1.0};
   double b1{0.0};
@@ -182,10 +189,9 @@ preprocess_window(std::span<const double> raw, double raw_fs, double target_fs,
   const std::size_t n_freq = n / 2 + 1;
   std::vector<fftw_complex> out(n_freq);
 
-  static std::mutex fftw_plan_mutex;
   fftw_plan plan = nullptr;
   {
-    std::scoped_lock lk(fftw_plan_mutex);
+    std::scoped_lock lk(fftw_planner_mutex());
     plan = fftw_plan_dft_r2c_1d(static_cast<int>(n), in.data(), out.data(),
                                 FFTW_ESTIMATE);
   }
@@ -195,7 +201,7 @@ preprocess_window(std::span<const double> raw, double raw_fs, double target_fs,
   fftw_execute(plan);
 
   {
-    std::scoped_lock lk(fftw_plan_mutex);
+    std::scoped_lock lk(fftw_planner_mutex());
     fftw_destroy_plan(plan);
   }
 

@@ -13,6 +13,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -81,12 +82,32 @@ zip_filename_overlaps(std::string_view fname, double min_mjd, double max_mjd) {
 
 } // namespace detail
 
-// Reads all matching miniSEED records from `station_dir` (containing `.zip`
-// and/or `.mseed` files) within `[min_mjd, max_mjd]` and assembles continuous
-// traces per channel.
+// Selects one seismometer component across stations whatever their sampling
+// band: a SEED channel code (e.g. `BHZ`) is accepted when its first two
+// letters are one of `bands` and its last letter is `component`. When a
+// station records several accepted bands, the earliest listed one is kept.
+struct ChannelSelector {
+  std::vector<std::string> bands{"BH", "HH"};
+  char component{'Z'};
+
+  // Position of `channel`'s band in `bands`, or -1 if it is not accepted.
+  [[nodiscard]] int band_rank(std::string_view channel) const noexcept {
+    if (channel.size() != 3 || channel[2] != component)
+      return -1;
+    for (std::size_t i = 0; i < bands.size(); ++i) {
+      if (channel.substr(0, 2) == bands[i])
+        return static_cast<int>(i);
+    }
+    return -1;
+  }
+};
+
+// Reads all miniSEED records of the channel picked by `select` from
+// `station_dir` (containing `.zip` and/or `.mseed` files) within
+// `[min_mjd, max_mjd]` and assembles them into continuous traces.
 [[nodiscard]] inline std::vector<mseed::ContinuousTrace>
 load_station_waveforms(const std::filesystem::path &station_dir, double min_mjd,
-                       double max_mjd, std::string_view chan_prefix = "") {
+                       double max_mjd, const ChannelSelector &select = {}) {
   std::vector<mseed::DecodedRecord> records;
   std::error_code ec;
   if (!std::filesystem::exists(station_dir, ec))
@@ -103,7 +124,6 @@ load_station_waveforms(const std::filesystem::path &station_dir, double min_mjd,
   constexpr std::size_t kChunkBytes = 256 * 4096;
   std::vector<std::uint8_t> chunk(kChunkBytes);
 
-  std::string locked_channel;
   bool reached_max_mjd = false;
 
   auto scan_buffer_prefix =
@@ -128,11 +148,7 @@ load_station_waveforms(const std::filesystem::path &station_dir, double min_mjd,
 
       if (hdr.sample_rate_hz <= 0.0 || hdr.num_samples == 0)
         continue;
-      if (!chan_prefix.empty() && !hdr.channel.starts_with(chan_prefix))
-        continue;
-      if (locked_channel.empty())
-        locked_channel = hdr.channel;
-      if (hdr.channel != locked_channel)
+      if (select.band_rank(hdr.channel) < 0)
         continue;
 
       const double dur_days =
@@ -177,7 +193,6 @@ load_station_waveforms(const std::filesystem::path &station_dir, double min_mjd,
           continue;
 
         std::size_t carry = 0;
-        locked_channel.clear();
         reached_max_mjd = false;
         while (!reached_max_mjd) {
           const zip_int64_t nr =
@@ -206,7 +221,6 @@ load_station_waveforms(const std::filesystem::path &station_dir, double min_mjd,
       if (!in)
         continue;
       std::size_t carry = 0;
-      locked_channel.clear();
       reached_max_mjd = false;
       while (in) {
         in.read(reinterpret_cast<char *>(chunk.data() + carry),
@@ -225,7 +239,14 @@ load_station_waveforms(const std::filesystem::path &station_dir, double min_mjd,
     }
   }
 
-  return mseed::assemble_traces(records);
+  auto traces = mseed::assemble_traces(records);
+  int best_rank = std::numeric_limits<int>::max();
+  for (const auto &tr : traces)
+    best_rank = std::min(best_rank, select.band_rank(tr.channel));
+  std::erase_if(traces, [&](const mseed::ContinuousTrace &tr) {
+    return select.band_rank(tr.channel) != best_rank;
+  });
+  return traces;
 }
 
 } // namespace chaosmap::io

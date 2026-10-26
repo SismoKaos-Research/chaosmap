@@ -32,7 +32,7 @@
     "coseismic_strike_deg": 248.00000,
     "after_strike_deg": 60.14716,
     "strike_change_deg": 81.30969,
-    "centroid_shift_km": 54.75909,
+    "centroid_shift_km": 60.77244,
     "pre_events_count": 2114,
     "post_aftershocks_count": 6579,
     "post_aftershock_length_km": 79.67927,
@@ -47,17 +47,17 @@
       "strike_misfit_deg": 42.32271,
       "spatial_roc_auc": 0.55293,
       "composite_skill": 0.47061,
-      "assigned_weight": 0.38673
+      "assigned_weight": 0.38025
     },
     "l_seis": {
       "available": true,
-      "ridge_to_rupture_dist_km": 36.22442,
-      "strike_misfit_deg": 14.89770,
-      "spatial_roc_auc": 0.87219,
-      "temporal_pre_auc": 0.86667,
-      "null_p_value": 0.12500,
-      "composite_skill": 0.74629,
-      "assigned_weight": 0.61327
+      "ridge_to_rupture_dist_km": 20.33374,
+      "strike_misfit_deg": 19.29338,
+      "spatial_roc_auc": 0.86505,
+      "temporal_pre_auc": 0.80000,
+      "null_p_value": 0.25000,
+      "composite_skill": 0.76701,
+      "assigned_weight": 0.61975
     }
   }
 }
