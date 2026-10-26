@@ -104,11 +104,14 @@ namespace detail {
   return sec / 86400.0;
 }
 
+// True if [w_start_mjd, w_end_mjd] overlaps the signal of any event of
+// magnitude >= `min_mag`.
 [[nodiscard]] inline bool
 window_overlaps_catalog(double w_start_mjd, double w_end_mjd,
-                        std::span<const io::CatalogEvent> events) noexcept {
+                        std::span<const io::CatalogEvent> events,
+                        double min_mag = 4.3) noexcept {
   for (const auto &ev : events) {
-    if (ev.magnitude < 4.3)
+    if (ev.magnitude < min_mag)
       continue;
     const double ev_mjd = 40587.0 + static_cast<double>(ev.epoch_s) / 86400.0;
     const double ev_end = ev_mjd + coda_duration_days(ev.magnitude);
@@ -246,7 +249,7 @@ analyze_broadband_array(const core::CaseConfig &cfg,
       sum.dist_to_hypo_km = geo::haversine_km(sum.lat_deg, sum.lon_deg,
                                               cfg.event.lat, cfg.event.lon);
 
-      auto traces = io::load_station_waveforms(dir, min_mjd, max_mjd, "BH");
+      auto traces = io::load_station_waveforms(dir, min_mjd, max_mjd);
       if (traces.empty())
         return;
 

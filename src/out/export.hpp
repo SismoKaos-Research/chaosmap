@@ -7,6 +7,8 @@
 // - `lyapunov_stations.csv` & `lyapunov_daily.csv`
 // - `grids.csv`
 // - `fault_features.geojson` (RFC 7946 GeoJSON for GIS / web viewers).
+// and, for the `lseis-study` subcommand (`export_lseis_study`):
+// - `lseis_study_stations.csv` & `lseis_study_windows.csv`
 
 #include "anomaly/array_anomaly.hpp"
 #include "core/config.hpp"
@@ -17,6 +19,7 @@
 #include "gnss/trajectory.hpp"
 #include "okada/inversion.hpp"
 #include "seis/planes.hpp"
+#include "study/lseis_study.hpp"
 
 #include <cmath>
 #include <filesystem>
@@ -361,6 +364,61 @@ inline void export_case_results(
     }
 
     f << "\n  ]\n}\n";
+  }
+}
+
+inline void export_lseis_study(const core::CaseConfig &cfg,
+                               const study::LseisStudyResult &res) {
+  namespace fs = std::filesystem;
+  const fs::path out_dir = cfg.paths.out_dir;
+  fs::create_directories(out_dir);
+  // Non-finite values (e.g. too few days for a bootstrap) are empty cells
+  auto num =[](std::ostream &os, double v) -> std::ostream & {
+    if (std::isfinite(v))
+      os << v;
+    return os;
+  };
+
+  {
+    std::ofstream f(out_dir / "lseis_study_stations.csv");
+    f << std::fixed << std::setprecision(5);
+    f << "station,channel,lat,lon,dist_km,n_pre,n_post,frac_nonlinear_pre,"
+         "frac_nonlinear_post,r2_surr,r2_covariates";
+    for (const char *e :
+         {"delta_wolf", "delta_surr_mean", "delta_excess", "delta_wolf_adj"})
+      f << ',' << e << ',' << e << "_ci_lo," << e << "_ci_hi";
+    f << '\n';
+    for (const auto &s : res.stations) {
+      f << s.station << ',' << s.channel << ',' << s.lat_deg << ','
+        << s.lon_deg << ',' << s.dist_km << ',' << s.n_pre << ',' << s.n_post;
+      for (double v : {s.frac_nonlinear_pre, s.frac_nonlinear_post, s.r2_surr,
+                       s.r2_covariates})
+        num(f << ',', v);
+      for (const auto *e : {&s.delta_wolf, &s.delta_surr_mean, &s.delta_excess,
+                            &s.delta_wolf_adj}) {
+        num(f << ',', e->estimate);
+        num(f << ',', e->ci_lo);
+        num(f << ',', e->ci_hi);
+      }
+      f << '\n';
+    }
+  }
+
+  {
+    std::ofstream f(out_dir / "lseis_study_windows.csv");
+    f << std::fixed << std::setprecision(5);
+    f << "station,start_mjd,rel_day,post,wolf,surr_mean,surr_sd,surr_z,"
+         "surr_rank,n_surr,mean_period_s,log10_rms_fault,log10_rms_ctrl\n";
+    for (const auto &w : res.windows) {
+      f << res.stations[w.station_idx].station << ',' << w.start_mjd << ','
+        << w.rel_day << ',' << (w.post ? 1 : 0);
+      for (double v : {w.wolf, w.surr_mean, w.surr_sd, w.surr_z, w.surr_rank})
+        num(f << ',', v);
+      f << ',' << w.n_surr;
+      for (double v : {w.mean_period_s, w.log10_rms_fault, w.log10_rms_ctrl})
+        num(f << ',', v);
+      f << '\n';
+    }
   }
 }
 

@@ -10,11 +10,13 @@
 #include "okada/inversion.hpp"
 #include "out/export.hpp"
 #include "seis/planes.hpp"
+#include "study/lseis_study.hpp"
 
 #include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -33,7 +35,56 @@ std::ostream &operator<<(std::ostream &os, DipText d) {
 void print_usage() {
   std::cout << "Usage:\n"
             << "  chaosmap [all|gnss|invert|seismicity|lyapunov|fuse] --config "
-               "<case.toml>\n";
+               "<case.toml>\n"
+            << "  chaosmap lseis-study --config <case.toml> [--surrogates N]\n"
+            << "      Surrogate-controlled test of the L-seis change across "
+               "the mainshock\n";
+}
+
+// `lseis-study`: does the post-mainshock change of the broadband Wolf
+// exponent survive IAAFT surrogates and spectral covariates?
+int run_lseis_study(const chaosmap::core::CaseConfig &cfg, int n_surrogates) {
+  using namespace chaosmap;
+  const auto events = io::read_catalog_csv(
+      cfg.paths.catalog_csv, cfg.region.lat_min, cfg.region.lat_max,
+      cfg.region.lon_min, cfg.region.lon_max, 2.5);
+  study::LseisStudyParams params;
+  params.n_surrogates = n_surrogates;
+  const auto res = study::run_lseis_study(cfg, events, params);
+  if (res.stations.empty()) {
+    std::cout << "[lseis-study] no broadband stations with waveforms in "
+              << cfg.paths.broadband_dir << "\n";
+    return EXIT_FAILURE;
+  }
+  out::export_lseis_study(cfg, res);
+
+  auto effect = [](const study::Effect &e) {
+    std::ostringstream os;
+    os << std::fixed << std::setprecision(3) << std::showpos << e.estimate
+       << std::noshowpos << " [" << e.ci_lo << ", " << e.ci_hi << "]";
+    return os.str();
+  };
+  std::cout << "[lseis-study] " << res.windows.size() << " windows, "
+            << params.n_surrogates
+            << " IAAFT surrogates each; post - pre means with 95% day-block "
+               "bootstrap CIs\n";
+  for (const auto &s : res.stations) {
+    std::cout << std::fixed << std::setprecision(2) << "  [" << s.station
+              << " " << s.channel << "] dist=" << s.dist_km
+              << " km, n_pre=" << s.n_pre << ", n_post=" << s.n_post
+              << ", nonlinear windows pre/post=" << s.frac_nonlinear_pre
+              << "/" << s.frac_nonlinear_post << ", R2(surr)=" << s.r2_surr
+              << ", R2(cov)=" << s.r2_covariates << "\n"
+              << "      d_wolf      " << effect(s.delta_wolf) << "\n"
+              << "      d_surr_mean " << effect(s.delta_surr_mean)
+              << "  (predicted by spectrum + amplitudes)\n"
+              << "      d_excess    " << effect(s.delta_excess)
+              << "  (wolf - surrogate mean)\n"
+              << "      d_wolf_adj  " << effect(s.delta_wolf_adj)
+              << "  (controlling for mean period, band RMS)\n";
+  }
+  std::cout << "  -> " << cfg.paths.out_dir << "\n";
+  return EXIT_SUCCESS;
 }
 
 } // namespace
@@ -41,6 +92,7 @@ void print_usage() {
 int main(int argc, char **argv) {
   std::string subcmd = "all";
   std::string config_path;
+  int n_surrogates = chaosmap::study::LseisStudyParams{}.n_surrogates;
 
   for (int i = 1; i < argc; ++i) {
     const std::string_view arg = argv[i];
@@ -51,6 +103,10 @@ int main(int argc, char **argv) {
     if (arg == "--config" || arg == "-c") {
       if (i + 1 < argc) {
         config_path = argv[++i];
+      }
+    } else if (arg == "--surrogates") {
+      if (i + 1 < argc) {
+        n_surrogates = std::atoi(argv[++i]);
       }
     } else if (!arg.starts_with("--") && config_path.empty() &&
                arg.ends_with(".toml")) {
@@ -78,6 +134,9 @@ int main(int argc, char **argv) {
             << ")\n"
             << "==============================================================="
                "=====\n";
+
+  if (subcmd == "lseis-study")
+    return run_lseis_study(cfg, n_surrogates);
 
   // 1. GNSS Station Loading & Trajectory Decomposition
   const auto steps =

@@ -1,5 +1,6 @@
 #include "anomaly/array_anomaly.hpp"
 #include "chaos/lyapunov.hpp"
+#include "chaos/surrogates.hpp"
 #include "core/config.hpp"
 #include "core/linalg.hpp"
 #include "dsp/filter.hpp"
@@ -13,13 +14,17 @@
 #include "okada/inversion.hpp"
 #include "okada/okada85.hpp"
 #include "seis/planes.hpp"
+#include "study/lseis_study.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <mutex>
 #include <numbers>
+#include <random>
 
 namespace {
 
@@ -296,8 +301,10 @@ void test_ftle_and_waveforms_lyapunov() {
     return;
   const double mjd0 = 55849.0; // 2011-10-15 (start of TVAN_2011-10-15.zip)
   const auto traces =
-      io::load_station_waveforms(tvan_dir, mjd0, mjd0 + 0.02, "BH");
+      io::load_station_waveforms(tvan_dir, mjd0, mjd0 + 0.02);
   CHECK(!traces.empty());
+  for (const auto &tr : traces)
+    CHECK(tr.channel == "BHZ");
   if (!traces.empty()) {
     const auto &tr = traces.front();
     CHECK(tr.sample_rate_hz >= 20.0);
@@ -619,6 +626,179 @@ void test_seismicity_dip_with_fixed_depths() {
             << "/" << mixed.size() << "\n";
 }
 
+void test_channel_selector() {
+  using namespace chaosmap;
+  const io::ChannelSelector z{};
+  CHECK(z.band_rank("BHZ") == 0);
+  CHECK(z.band_rank("HHZ") == 1);
+  CHECK(z.band_rank("BHN") == -1);
+  CHECK(z.band_rank("HNZ") == -1); // strong-motion band is not accepted
+  CHECK(z.band_rank("BH") == -1);
+  const io::ChannelSelector hh_n{.bands = {"HH"}, .component = 'N'};
+  CHECK(hh_n.band_rank("HHN") == 0);
+  CHECK(hh_n.band_rank("BHN") == -1);
+
+  // VMUR only records 100 Hz HH channels; it used to be dropped by a hard
+  // `BH` filter
+  const auto van_cfg = core::CaseConfig::load("configs/van2011.toml");
+  const auto vmur_dir = van_cfg.paths.broadband_dir / "VMUR";
+  if (!require_data(vmur_dir, "test_channel_selector (VMUR)"))
+    return;
+  const auto traces = io::load_station_waveforms(vmur_dir, 55849.0, 55849.02);
+  CHECK(!traces.empty());
+  for (const auto &tr : traces) {
+    CHECK(tr.channel == "HHZ");
+    CHECK_NEAR(tr.sample_rate_hz, 100.0, 1e-6);
+  }
+}
+
+// Lorenz-63 x(t) sampled every `dt` after a 2000-sample transient (RK4).
+std::vector<double> lorenz_x(int n, double dt) {
+  double x = 1.0, y = 1.0, z = 1.0;
+  auto f = [](double x, double y, double z) {
+    return std::array<double, 3>{10.0 * (y - x), x * (28.0 - z) - y,
+                                 x * y - 8.0 / 3.0 * z};
+  };
+  const double h = 0.001;
+  const int sub = static_cast<int>(std::lround(dt / h));
+  std::vector<double> out;
+  for (int i = 0; i < n + 2000; ++i) {
+    for (int k = 0; k < sub; ++k) {
+      const auto k1 = f(x, y, z);
+      const auto k2 =
+          f(x + 0.5 * h * k1[0], y + 0.5 * h * k1[1], z + 0.5 * h * k1[2]);
+      const auto k3 =
+          f(x + 0.5 * h * k2[0], y + 0.5 * h * k2[1], z + 0.5 * h * k2[2]);
+      const auto k4 = f(x + h * k3[0], y + h * k3[1], z + h * k3[2]);
+      x += h / 6.0 * (k1[0] + 2.0 * k2[0] + 2.0 * k3[0] + k4[0]);
+      y += h / 6.0 * (k1[1] + 2.0 * k2[1] + 2.0 * k3[1] + k4[1]);
+      z += h / 6.0 * (k1[2] + 2.0 * k2[2] + 2.0 * k3[2] + k4[2]);
+    }
+    if (i >= 2000)
+      out.push_back(x);
+  }
+  return out;
+}
+
+// |FFT(x)| over the one-sided frequencies.
+std::vector<double> fft_amplitudes(std::vector<double> x) {
+  std::vector<fftw_complex> spec(x.size() / 2 + 1);
+  fftw_plan plan = nullptr;
+  {
+    std::scoped_lock lk(chaosmap::dsp::fftw_planner_mutex());
+    plan = fftw_plan_dft_r2c_1d(static_cast<int>(x.size()), x.data(),
+                                spec.data(), FFTW_ESTIMATE);
+  }
+  fftw_execute(plan);
+  {
+    std::scoped_lock lk(chaosmap::dsp::fftw_planner_mutex());
+    fftw_destroy_plan(plan);
+  }
+  std::vector<double> amp;
+  for (const auto &c : spec)
+    amp.push_back(std::hypot(c[0], c[1]));
+  return amp;
+}
+
+void test_iaaft_surrogate_test() {
+  using namespace chaosmap;
+  auto wolf = [](std::span<const double> x) {
+    return chaos::wolf_lye_core(chaos::zscore_normalize(x), 5.0, 5, 5, 5);
+  };
+
+  // A surrogate has exactly the input's values and nearly its spectrum
+  const auto lz = lorenz_x(3000, 0.02);
+  chaos::IaaftGenerator gen(lz);
+  CHECK(gen.valid());
+  std::mt19937_64 rng(1);
+  const auto s = gen.generate(rng);
+  auto a = lz;
+  auto b = s;
+  std::ranges::sort(a);
+  std::ranges::sort(b);
+  CHECK(a == b);
+  CHECK(s != lz);
+  const auto amp_x = fft_amplitudes(lz);
+  const auto amp_s = fft_amplitudes(s);
+  double num = 0.0, den = 0.0;
+  for (std::size_t k = 1; k < amp_x.size(); ++k) {
+    num += (amp_s[k] - amp_x[k]) * (amp_s[k] - amp_x[k]);
+    den += amp_x[k] * amp_x[k];
+  }
+  CHECK(std::sqrt(num / den) < 0.05);
+
+  // Deterministic chaos: the Wolf exponent is far below every surrogate
+  const auto chaos_t = chaos::surrogate_test(lz, 19, 7, wolf);
+  CHECK(chaos_t.n_surr == 19);
+  CHECK(chaos_t.rank_frac == 0.0);
+  CHECK(chaos_t.z < -8.0);
+
+  // Bandpassed Gaussian noise through the L-seis preprocessing has a finite
+  // positive Wolf exponent, which its surrogates reproduce
+  std::mt19937_64 noise_rng(7);
+  std::normal_distribution<double> nd;
+  double z_sum = 0.0;
+  for (int trial = 0; trial < 6; ++trial) {
+    std::vector<double> raw(30000);
+    for (double &v : raw)
+      v = nd(noise_rng);
+    const auto x = dsp::preprocess_window(raw, 50.0, 5.0, 0.05, 0.5);
+    const auto t = chaos::surrogate_test(x, 19, 200 + trial, wolf);
+    CHECK(t.value > 0.5);
+    CHECK(std::abs(t.z) < 3.0);
+    z_sum += t.z;
+  }
+  CHECK(std::abs(z_sum / 6.0) < 1.0);
+
+  // Same seed, same surrogates
+  const auto again = chaos::surrogate_test(lz, 19, 7, wolf);
+  CHECK(again.surr_mean == chaos_t.surr_mean);
+  std::cout << "  [IAAFT] lorenz wolf=" << chaos_t.value
+            << " surr=" << chaos_t.surr_mean << " z=" << chaos_t.z
+            << ", bandpassed noise mean z=" << z_sum / 6.0 << "\n";
+}
+
+void test_lseis_study_effects() {
+  using namespace chaosmap;
+  // 8 pre and 7 post days of 8 windows. The Wolf exponent follows its
+  // surrogate mean, which follows the mean period; after the mainshock the
+  // mean period rises, plus a 0.05 excess not explained by the spectrum.
+  std::mt19937_64 rng(3);
+  std::normal_distribution<double> nd;
+  std::vector<study::WindowRecord> recs;
+  for (int day = -8; day < 7; ++day) {
+    for (int k = 0; k < 8; ++k) {
+      study::WindowRecord r;
+      r.rel_day = day;
+      r.post = day >= 0;
+      r.mean_period_s = 4.0 + 0.3 * nd(rng) + (r.post ? 1.0 : 0.0);
+      r.log10_rms_fault = 2.0 + 0.1 * nd(rng);
+      r.log10_rms_ctrl = 1.5 + 0.1 * nd(rng);
+      r.surr_mean = 1.2 - 0.1 * r.mean_period_s;
+      r.wolf = r.surr_mean - (r.post ? 0.05 : 0.0) + 0.005 * nd(rng);
+      r.n_surr = 39;
+      r.surr_rank = 0.5;
+      recs.push_back(r);
+    }
+  }
+  std::vector<const study::WindowRecord *> w;
+  for (const auto &r : recs)
+    w.push_back(&r);
+  study::StationStudy st;
+  study::detail::summarize_station(st, w, study::LseisStudyParams{}, 0);
+  CHECK(st.n_pre == 64 && st.n_post == 56);
+  CHECK_NEAR(st.delta_surr_mean.estimate, -0.1, 0.02);
+  CHECK_NEAR(st.delta_excess.estimate, -0.05, 0.005);
+  CHECK_NEAR(st.delta_wolf.estimate,
+             st.delta_surr_mean.estimate + st.delta_excess.estimate, 1e-12);
+  // Controlling for the mean period leaves only the 0.05 excess
+  CHECK_NEAR(st.delta_wolf_adj.estimate, -0.05, 0.01);
+  CHECK(st.delta_excess.ci_lo < -0.05 && st.delta_excess.ci_hi > -0.05);
+  CHECK(st.delta_excess.ci_hi < 0.0);
+  CHECK(st.r2_covariates > 0.9);
+  CHECK_NEAR(st.frac_nonlinear_pre, 0.0, 1e-12);
+}
+
 } // namespace
 
 int main() {
@@ -635,6 +815,9 @@ int main() {
   test_fused_displacement_frame();
   test_synthetic_inversion();
   test_seismicity_dip_with_fixed_depths();
+  test_channel_selector();
+  test_iaaft_surrogate_test();
+  test_lseis_study_effects();
   if (g_failures == 0) {
     std::cout << "[PASS] All chaosmap tests passed";
     if (g_skipped > 0)
